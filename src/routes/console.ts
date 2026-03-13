@@ -1,0 +1,283 @@
+import { Router } from "express";
+import type { PairingManager } from "../pairing/pairing-manager.js";
+import type { MCPManager } from "../mcp/mcp-manager.js";
+import type { ConfigManager } from "../config/config-manager.js";
+import { logger } from "../utils/logger.js";
+
+const startTime = Date.now();
+
+export function consoleRouter(
+  pairingManager: PairingManager,
+  mcpManager: MCPManager,
+  configManager: ConfigManager
+): Router {
+  const router = Router();
+  const providerRegistry = mcpManager.registry;
+
+  // ─── Stats ───────────────────────────────────────────────
+
+  router.get("/api/console/stats", (_req, res) => {
+    const uptimeMs = Date.now() - startTime;
+    res.json({
+      status: "ok",
+      version: "0.1.0",
+      uptime: uptimeMs,
+      uptimeFormatted: formatUptime(uptimeMs),
+      providerCount: providerRegistry.listProviders().length,
+      sessionCount: pairingManager.sessionCount,
+      activeTokenCount: pairingManager.activeTokenCount,
+    });
+  });
+
+  // ─── Sessions ────────────────────────────────────────────
+
+  router.get("/api/console/sessions", (_req, res) => {
+    res.json({ sessions: pairingManager.listSessions() });
+  });
+
+  // ─── Tokens ──────────────────────────────────────────────
+
+  router.get("/api/console/tokens", (_req, res) => {
+    res.json({ tokens: pairingManager.listActiveTokens() });
+  });
+
+  router.delete("/api/console/tokens/:tokenPrefix", (req, res) => {
+    const { tokenPrefix } = req.params;
+    const ok = pairingManager.revokeToken(tokenPrefix);
+    if (ok) {
+      res.json({ status: "revoked" });
+    } else {
+      res.status(404).json({ error: "Token not found" });
+    }
+  });
+
+  // ─── Settings ────────────────────────────────────────────
+
+  router.get("/api/console/settings", (_req, res) => {
+    const config = configManager.get();
+    res.json({
+      port: config.port,
+      allowedOrigins: config.allowedOrigins,
+      tokenTTL: config.tokenTTL,
+      pairingTimeout: config.pairingTimeout,
+      rateLimit: config.rateLimit,
+    });
+  });
+
+  router.put("/api/console/settings", async (req, res) => {
+    try {
+      const { allowedOrigins, tokenTTL, pairingTimeout } = req.body;
+      const updated = await configManager.update({
+        ...(allowedOrigins !== undefined && { allowedOrigins }),
+        ...(tokenTTL !== undefined && { tokenTTL }),
+        ...(pairingTimeout !== undefined && { pairingTimeout }),
+      });
+      res.json({
+        port: updated.port,
+        allowedOrigins: updated.allowedOrigins,
+        tokenTTL: updated.tokenTTL,
+        pairingTimeout: updated.pairingTimeout,
+        rateLimit: updated.rateLimit,
+      });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // ─── Providers (read) ────────────────────────────────────
+
+  router.get("/api/console/providers", (_req, res) => {
+    res.json({ providers: providerRegistry.listProviders() });
+  });
+
+  // ─── Providers (CRUD) ────────────────────────────────────
+
+  router.post("/api/console/providers", async (req, res) => {
+    try {
+      const { name, transport, command, args, env, endpoint, datasets } = req.body;
+      if (!name || !transport || !datasets?.length) {
+        res.status(400).json({ error: "name, transport, and datasets are required" });
+        return;
+      }
+
+      const existing = providerRegistry.listProviders().find((p) => p.name === name);
+      if (existing) {
+        res.status(409).json({ error: `Provider "${name}" already exists` });
+        return;
+      }
+
+      const config = { name, transport, command, args, env, endpoint, datasets };
+      await mcpManager.addProvider(config);
+      await configManager.updateProviders(
+        providerRegistry.listProviders().map((p) => mcpManager.getProviderConfig(p.name) ?? p as any)
+      );
+
+      const provider = providerRegistry.listProviders().find((p) => p.name === name);
+      res.status(201).json({ status: "created", provider });
+    } catch (err: any) {
+      logger.error("Failed to add provider:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.put("/api/console/providers/:name", async (req, res) => {
+    try {
+      const { name } = req.params;
+      const existing = providerRegistry.listProviders().find((p) => p.name === name);
+      if (!existing) {
+        res.status(404).json({ error: `Provider "${name}" not found` });
+        return;
+      }
+
+      const { transport, command, args, env, endpoint, datasets } = req.body;
+      const config = {
+        name,
+        transport: transport ?? existing.transport,
+        command,
+        args,
+        env,
+        endpoint,
+        datasets: datasets ?? existing.datasets,
+      };
+
+      await mcpManager.removeProvider(name);
+      await mcpManager.addProvider(config);
+      await configManager.updateProviders(
+        providerRegistry.listProviders().map((p) => mcpManager.getProviderConfig(p.name) ?? p as any)
+      );
+
+      const provider = providerRegistry.listProviders().find((p) => p.name === name);
+      res.json({ status: "updated", provider });
+    } catch (err: any) {
+      logger.error("Failed to update provider:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.delete("/api/console/providers/:name", async (req, res) => {
+    try {
+      const { name } = req.params;
+      const existing = providerRegistry.listProviders().find((p) => p.name === name);
+      if (!existing) {
+        res.status(404).json({ error: `Provider "${name}" not found` });
+        return;
+      }
+
+      await mcpManager.removeProvider(name);
+      await configManager.updateProviders(
+        providerRegistry.listProviders().map((p) => mcpManager.getProviderConfig(p.name) ?? p as any)
+      );
+
+      res.json({ status: "deleted" });
+    } catch (err: any) {
+      logger.error("Failed to delete provider:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.post("/api/console/providers/:name/restart", async (req, res) => {
+    try {
+      const { name } = req.params;
+      const existing = providerRegistry.listProviders().find((p) => p.name === name);
+      if (!existing) {
+        res.status(404).json({ error: `Provider "${name}" not found` });
+        return;
+      }
+
+      await mcpManager.restartProvider(name);
+      const provider = providerRegistry.listProviders().find((p) => p.name === name);
+      res.json({ status: "restarted", provider });
+    } catch (err: any) {
+      logger.error("Failed to restart provider:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ─── Self-Test ───────────────────────────────────────────
+
+  router.post("/api/console/self-test", async (_req, res) => {
+    const results: Array<{ name: string; status: "pass" | "fail" | "skip"; detail: string }> = [];
+
+    // 1. Health check
+    try {
+      const providers = providerRegistry.listProviders();
+      results.push({
+        name: "Health Check",
+        status: "pass",
+        detail: `v0.1.0, ${providers.length} provider(s)`,
+      });
+    } catch (err: any) {
+      results.push({ name: "Health Check", status: "fail", detail: err.message });
+    }
+
+    // 2. Provider connectivity
+    const providers = providerRegistry.listProviders();
+    if (providers.length === 0) {
+      results.push({ name: "Provider Connectivity", status: "skip", detail: "No providers configured" });
+    } else {
+      const connected = providers.filter((p) => p.status === "connected");
+      const failed = providers.filter((p) => p.status !== "connected");
+      if (failed.length === 0) {
+        results.push({
+          name: "Provider Connectivity",
+          status: "pass",
+          detail: providers.map((p) => `${p.name}: ${p.status}`).join(", "),
+        });
+      } else {
+        results.push({
+          name: "Provider Connectivity",
+          status: connected.length > 0 ? "pass" : "fail",
+          detail: providers.map((p) => `${p.name}: ${p.status}`).join(", "),
+        });
+      }
+    }
+
+    // 3. Graph query test
+    const connectedProvider = providers.find((p) => p.status === "connected");
+    if (!connectedProvider) {
+      results.push({ name: "Graph Query", status: "skip", detail: "No connected provider" });
+    } else {
+      try {
+        const adapter = providerRegistry.getAdapter(connectedProvider.name);
+        if (!adapter) {
+          results.push({ name: "Graph Query", status: "fail", detail: "Adapter not found" });
+        } else {
+          const dataset = connectedProvider.datasets[0] ?? "default";
+          const result = await adapter.getSchema(dataset);
+          const nodeCount = result.nodes?.length ?? 0;
+          const edgeCount = result.edges?.length ?? 0;
+          results.push({
+            name: "Graph Query",
+            status: "pass",
+            detail: `Schema from "${connectedProvider.name}/${dataset}": ${nodeCount} node types, ${edgeCount} edge types`,
+          });
+        }
+      } catch (err: any) {
+        results.push({ name: "Graph Query", status: "fail", detail: err.message });
+      }
+    }
+
+    // 4. CORS config
+    const config = configManager.get();
+    const originsDesc = config.allowedOrigins.includes("*")
+      ? "Allow all origins (*)"
+      : `${config.allowedOrigins.length} origin(s) configured`;
+    results.push({ name: "CORS Config", status: "pass", detail: originsDesc });
+
+    const overall = results.every((r) => r.status !== "fail") ? "pass" : "fail";
+    res.json({ results, overall });
+  });
+
+  return router;
+}
+
+function formatUptime(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  const h = Math.floor(m / 60);
+  const d = Math.floor(h / 24);
+  if (d > 0) return `${d}d ${h % 24}h ${m % 60}m`;
+  if (h > 0) return `${h}h ${m % 60}m ${s % 60}s`;
+  if (m > 0) return `${m}m ${s % 60}s`;
+  return `${s}s`;
+}

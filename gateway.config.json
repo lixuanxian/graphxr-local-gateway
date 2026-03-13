@@ -1,0 +1,11 @@
+{
+  "port": 19285,
+  "allowedOrigins": ["*"],
+  "tokenTTL": 28800,
+  "pairingTimeout": 300,
+  "rateLimit": {
+    "windowMs": 60000,
+    "max": 60
+  },
+  "providers": []
+}

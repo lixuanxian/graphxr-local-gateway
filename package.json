@@ -1,0 +1,39 @@
+{
+  "name": "graphxr-local-gateway",
+  "version": "0.1.0",
+  "description": "GraphXR Localhost Gateway — MCP Bridge + Aggregator for local graph data access",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "npx concurrently \"npm run dev:web\" \"npm run dev:server\"",
+    "dev:web":"cd console  && npm run dev",
+    "build:web":"cd console  && npm run build",
+    "dev:server": "tsx watch src/index.ts",
+    "build:server": "tsup",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "graphxr",
+    "mcp",
+    "gateway",
+    "graph-database"
+  ],
+  "license": "ISC",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "express": "^5.2.1",
+    "open": "^11.0.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.5.0",
+    "@types/supertest": "^7.2.0",
+    "supertest": "^7.2.2",
+    "tsup": "^8.5.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.0"
+  }
+}
