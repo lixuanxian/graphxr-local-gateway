@@ -150,10 +150,32 @@ export class MCPAdapter implements BaseAdapter {
       tool: toolName,
     });
 
-    const response = await this.client.callTool({
-      name: toolName,
-      arguments: args,
-    });
+    let response;
+    try {
+      response = await this.client.callTool({
+        name: toolName,
+        arguments: args,
+      });
+    } catch (err: any) {
+      const message = err.message ?? String(err);
+      logger.error(
+        `MCP tool call failed: ${this.providerName}/${toolName}`,
+        message
+      );
+      throw new Error(
+        `MCP tool "${toolName}" on provider "${this.providerName}" failed: ${message}`
+      );
+    }
+
+    // Check for MCP-level error responses
+    if (response.isError) {
+      const errorText = response.content
+        ?.filter((c: any) => c.type === "text")
+        .map((c: any) => c.text)
+        .join("\n") ?? "Unknown MCP error";
+      logger.error(`MCP tool error: ${this.providerName}/${toolName}`, errorText);
+      throw new Error(`MCP tool "${toolName}" returned error: ${errorText}`);
+    }
 
     if (response.content && Array.isArray(response.content)) {
       const textContent = response.content.find(

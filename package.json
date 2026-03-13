@@ -6,8 +6,8 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "npx concurrently \"npm run dev:web\" \"npm run dev:server\"",
-    "dev:web":"cd console  && npm run dev",
-    "build:web":"cd console  && npm run build",
+    "dev:web": "cd console  && npm run dev",
+    "build:web": "cd console  && npm run build",
     "dev:server": "tsx watch src/index.ts",
     "build:server": "tsup",
     "start": "node dist/index.js",
