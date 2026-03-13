@@ -10,6 +10,7 @@ import { pairRouter } from "./routes/pair.js";
 import { graphRouter } from "./routes/graph.js";
 import { catalogRouter } from "./routes/catalog.js";
 import { consoleRouter } from "./routes/console.js";
+import { proxyRouter } from "./routes/proxy.js";
 import type { PairingManager } from "./pairing/pairing-manager.js";
 import type { MCPManager } from "./mcp/mcp-manager.js";
 
@@ -50,6 +51,7 @@ export function createApp(
   app.use(pairRouter(pairingManager, config.port));
   app.use(graphRouter(mcpManager.registry));
   app.use(catalogRouter(mcpManager.registry));
+  app.use(proxyRouter(mcpManager.registry));
   app.use(consoleRouter(pairingManager, mcpManager, configManager));
 
   return app;
