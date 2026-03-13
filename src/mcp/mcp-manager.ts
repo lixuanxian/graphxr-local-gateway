@@ -28,7 +28,7 @@ export class MCPManager {
     if (providers.length === 0) {
       logger.info("No providers configured — registering mock adapter");
       this.registry.register(
-        { name: "mock", transport: "stdio", datasets: ["demo"], args: [] },
+        { name: "mock", transport: "stdio", databaseType: "generic", datasets: ["demo"], args: [] },
         new MockAdapter()
       );
       return;
@@ -136,7 +136,12 @@ export class MCPManager {
       `Provider "${config.name}" connected — ${tools.tools.length} tools available`
     );
 
-    const adapter = new MCPAdapter(config.name, client);
+    const adapter = new MCPAdapter(
+      config.name,
+      client,
+      config.databaseType ?? "generic",
+      config.toolMapping
+    );
 
     this.managed.set(config.name, { config, client, transport });
     this.registry.register(config, adapter);

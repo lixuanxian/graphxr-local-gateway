@@ -1,9 +1,11 @@
 import type { BaseAdapter } from "./adapters/base-adapter.js";
 import type { ProviderConfig } from "../types/config.js";
+import type { DatabaseType } from "../types/graph-delta.js";
 
 export interface ProviderInfo {
   name: string;
   transport: string;
+  databaseType: DatabaseType;
   datasets: string[];
   status: "connected" | "disconnected" | "error";
 }
@@ -29,6 +31,10 @@ export class ProviderRegistry {
     return this.adapters.get(name);
   }
 
+  getConfig(name: string): ProviderConfig | undefined {
+    return this.configs.get(name);
+  }
+
   setStatus(name: string, status: "connected" | "disconnected" | "error"): void {
     this.statuses.set(name, status);
   }
@@ -39,6 +45,7 @@ export class ProviderRegistry {
       result.push({
         name,
         transport: config.transport,
+        databaseType: config.databaseType ?? "generic",
         datasets: config.datasets,
         status: this.statuses.get(name) ?? "disconnected",
       });

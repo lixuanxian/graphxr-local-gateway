@@ -1,5 +1,14 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import type { GraphDelta, GNode, GEdge } from "../../types/graph-delta.js";
+import type {
+  GraphDelta,
+  GraphSchema,
+  GNode,
+  GEdge,
+  CategorySchema,
+  RelationshipSchema,
+  DatabaseType,
+} from "../../types/graph-delta.js";
+import type { MCPToolMapping } from "../../types/config.js";
 import type {
   BaseAdapter,
   NeighborsOptions,
@@ -8,49 +17,68 @@ import type {
 } from "./base-adapter.js";
 import { logger } from "../../utils/logger.js";
 
-/**
- * Generic MCP adapter — calls MCP tools on a downstream server
- * and converts results to GraphDelta.
- *
- * Tool name mapping is configurable per-provider. Defaults assume
- * the downstream server exposes tools like:
- *   - get_schema / describe_graph
- *   - get_neighbors / expand_node
- *   - run_query / execute_query
- */
-export interface MCPToolMapping {
-  schema?: string;
-  neighbors?: string;
-  expand?: string;
-  query?: string;
-}
-
-const DEFAULT_TOOL_MAPPING: MCPToolMapping = {
-  schema: "get_schema",
-  neighbors: "get_neighbors",
-  expand: "get_neighbors",
-  query: "run_query",
+// Default tool name mappings per database type
+const TOOL_DEFAULTS: Record<string, MCPToolMapping> = {
+  neo4j: {
+    schema: "get_schema",
+    neighbors: "get_neighbors",
+    expand: "get_neighbors",
+    query: "run_cypher_query",
+  },
+  spanner: {
+    schema: "get_schema",
+    neighbors: "get_neighbors",
+    expand: "get_neighbors",
+    query: "execute_query",
+  },
+  generic: {
+    schema: "get_schema",
+    neighbors: "get_neighbors",
+    expand: "get_neighbors",
+    query: "run_query",
+  },
 };
 
+/**
+ * Generic MCP adapter — calls MCP tools on a downstream server
+ * and converts results to GraphDelta (graphxr-database-proxy compatible).
+ *
+ * Supports database-type-aware normalization of node/edge formats.
+ */
 export class MCPAdapter implements BaseAdapter {
   readonly providerName: string;
   private client: Client;
-  private toolMapping: MCPToolMapping;
+  private toolMapping: Required<MCPToolMapping>;
+  private databaseType: DatabaseType;
 
   constructor(
     providerName: string,
     client: Client,
+    databaseType: DatabaseType = "generic",
     toolMapping?: Partial<MCPToolMapping>
   ) {
     this.providerName = providerName;
     this.client = client;
-    this.toolMapping = { ...DEFAULT_TOOL_MAPPING, ...toolMapping };
+    this.databaseType = databaseType;
+
+    const defaults = TOOL_DEFAULTS[databaseType] ?? TOOL_DEFAULTS.generic;
+    this.toolMapping = {
+      schema: toolMapping?.schema ?? defaults.schema ?? "get_schema",
+      neighbors:
+        toolMapping?.neighbors ?? defaults.neighbors ?? "get_neighbors",
+      expand: toolMapping?.expand ?? defaults.expand ?? "get_neighbors",
+      query: toolMapping?.query ?? defaults.query ?? "run_query",
+    };
   }
 
   async getSchema(dataset: string): Promise<GraphDelta> {
-    const toolName = this.toolMapping.schema!;
-    const result = await this.callTool(toolName, { dataset });
+    const result = await this.callTool(this.toolMapping.schema, { dataset });
     return this.toGraphDelta(result, dataset, "schema");
+  }
+
+  async getGraphSchema(dataset: string): Promise<GraphSchema> {
+    const result = await this.callTool(this.toolMapping.schema, { dataset });
+    return this.toGraphSchema(result);
   }
 
   async getNeighbors(
@@ -58,8 +86,7 @@ export class MCPAdapter implements BaseAdapter {
     nodeId: string,
     opts: NeighborsOptions
   ): Promise<GraphDelta> {
-    const toolName = this.toolMapping.neighbors!;
-    const result = await this.callTool(toolName, {
+    const result = await this.callTool(this.toolMapping.neighbors, {
       dataset,
       nodeId,
       edgeTypes: opts.edgeTypes,
@@ -74,8 +101,7 @@ export class MCPAdapter implements BaseAdapter {
     nodeIds: string[],
     opts: ExpandOptions
   ): Promise<GraphDelta> {
-    const toolName = this.toolMapping.expand!;
-    const result = await this.callTool(toolName, {
+    const result = await this.callTool(this.toolMapping.expand, {
       dataset,
       nodeIds,
       depth: opts.depth ?? 1,
@@ -89,8 +115,7 @@ export class MCPAdapter implements BaseAdapter {
     query: string,
     opts: QueryOptions
   ): Promise<GraphDelta> {
-    const toolName = this.toolMapping.query!;
-    const result = await this.callTool(toolName, {
+    const result = await this.callTool(this.toolMapping.query, {
       dataset,
       query,
       params: opts.params,
@@ -99,6 +124,10 @@ export class MCPAdapter implements BaseAdapter {
     });
     return this.toGraphDelta(result, dataset, "query");
   }
+
+  // -----------------------------------------------------------------------
+  // MCP tool invocation
+  // -----------------------------------------------------------------------
 
   private async callTool(
     toolName: string,
@@ -114,7 +143,6 @@ export class MCPAdapter implements BaseAdapter {
       arguments: args,
     });
 
-    // Extract text content from MCP response
     if (response.content && Array.isArray(response.content)) {
       const textContent = response.content.find(
         (c: any) => c.type === "text"
@@ -131,42 +159,37 @@ export class MCPAdapter implements BaseAdapter {
     return response;
   }
 
-  /**
-   * Convert raw MCP tool result to GraphDelta.
-   * This is a best-effort converter — real providers may need
-   * custom subclasses to handle specific formats.
-   */
+  // -----------------------------------------------------------------------
+  // Normalization: raw MCP result → GraphDelta
+  // -----------------------------------------------------------------------
+
   private toGraphDelta(
     raw: unknown,
     dataset: string,
-    tool: string
+    operation: string
   ): GraphDelta {
     const data = raw as any;
-
     const nodes: GNode[] = [];
     const edges: GEdge[] = [];
 
-    // Try to extract nodes/edges from common shapes
-    if (Array.isArray(data?.nodes)) {
-      for (const n of data.nodes) {
-        nodes.push({
-          id: String(n.id ?? n.nodeId ?? n.name),
-          type: String(n.type ?? n.label ?? n.labels?.[0] ?? "Unknown"),
-          props: n.properties ?? n.props ?? n,
-        });
-      }
+    // Extract nodes from various shapes
+    const rawNodes: any[] =
+      data?.nodes ?? data?.data?.nodes ?? data?.results?.nodes ?? [];
+    for (const n of rawNodes) {
+      nodes.push(this.normalizeNode(n));
     }
 
-    if (Array.isArray(data?.edges ?? data?.relationships)) {
-      for (const e of data.edges ?? data.relationships ?? []) {
-        edges.push({
-          id: String(e.id ?? e.edgeId ?? `${e.src}-${e.dst}`),
-          src: String(e.src ?? e.source ?? e.startNode ?? e.from),
-          dst: String(e.dst ?? e.target ?? e.endNode ?? e.to),
-          type: String(e.type ?? e.label ?? e.relationshipType ?? "RELATED"),
-          props: e.properties ?? e.props ?? {},
-        });
-      }
+    // Extract edges from various shapes
+    const rawEdges: any[] =
+      data?.edges ??
+      data?.relationships ??
+      data?.data?.edges ??
+      data?.data?.relationships ??
+      data?.results?.edges ??
+      data?.results?.relationships ??
+      [];
+    for (const e of rawEdges) {
+      edges.push(this.normalizeEdge(e));
     }
 
     return {
@@ -180,9 +203,114 @@ export class MCPAdapter implements BaseAdapter {
       provenance: {
         provider: this.providerName,
         dataset,
-        tool,
+        operation,
         timestamp: new Date().toISOString(),
       },
     };
+  }
+
+  /**
+   * Normalize a raw node object to GNode format.
+   * Handles multiple conventions: Neo4j (labels), Spanner (label), generic (type).
+   */
+  private normalizeNode(n: any): GNode {
+    const id = String(n.id ?? n.nodeId ?? n.identity ?? n.name ?? "");
+
+    // Labels: could be an array, a single string, or a "type" field
+    let labels: string[];
+    if (Array.isArray(n.labels)) {
+      labels = n.labels.map(String);
+    } else if (n.label) {
+      labels = [String(n.label)];
+    } else if (n.type) {
+      labels = [String(n.type)];
+    } else if (n.kind) {
+      labels = [String(n.kind)];
+    } else {
+      labels = ["Unknown"];
+    }
+
+    // Properties: could be nested or at top level
+    const properties: Record<string, unknown> =
+      n.properties ?? n.props ?? n.data ?? {};
+
+    return { id, labels, properties };
+  }
+
+  /**
+   * Normalize a raw edge object to GEdge format.
+   * Handles Neo4j (startNodeId/endNodeId), generic (src/dst, from/to, source/target).
+   */
+  private normalizeEdge(e: any): GEdge {
+    const id = String(
+      e.id ??
+        e.edgeId ??
+        e.identity ??
+        `${e.startNodeId ?? e.src ?? e.source ?? e.from}-${e.endNodeId ?? e.dst ?? e.target ?? e.to}`
+    );
+
+    const startNodeId = String(
+      e.startNodeId ?? e.src ?? e.source ?? e.startNode ?? e.from ?? ""
+    );
+    const endNodeId = String(
+      e.endNodeId ?? e.dst ?? e.target ?? e.endNode ?? e.to ?? ""
+    );
+
+    const type = String(
+      e.type ?? e.label ?? e.relationshipType ?? e.relationship ?? "RELATED"
+    );
+
+    const properties: Record<string, unknown> =
+      e.properties ?? e.props ?? e.data ?? {};
+
+    return { id, type, startNodeId, endNodeId, properties };
+  }
+
+  // -----------------------------------------------------------------------
+  // Normalization: raw MCP result → GraphSchema
+  // -----------------------------------------------------------------------
+
+  private toGraphSchema(raw: unknown): GraphSchema {
+    const data = raw as any;
+    const categories: CategorySchema[] = [];
+    const relationships: RelationshipSchema[] = [];
+
+    // Extract categories from various shapes
+    const rawCategories: any[] =
+      data?.categories ??
+      data?.nodeTypes ??
+      data?.node_types ??
+      data?.labels ??
+      [];
+    for (const c of rawCategories) {
+      categories.push({
+        name: String(c.name ?? c.label ?? c.type ?? "Unknown"),
+        props: Array.isArray(c.props) ? c.props : Object.keys(c.propsTypes ?? c.properties ?? {}),
+        keys: Array.isArray(c.keys) ? c.keys : [],
+        keysTypes: c.keysTypes ?? {},
+        propsTypes: c.propsTypes ?? c.propertyTypes ?? {},
+      });
+    }
+
+    // Extract relationships from various shapes
+    const rawRels: any[] =
+      data?.relationships ??
+      data?.edgeTypes ??
+      data?.edge_types ??
+      data?.relationshipTypes ??
+      [];
+    for (const r of rawRels) {
+      relationships.push({
+        name: String(r.name ?? r.type ?? r.label ?? "RELATED"),
+        props: Array.isArray(r.props) ? r.props : Object.keys(r.propsTypes ?? r.properties ?? {}),
+        keys: Array.isArray(r.keys) ? r.keys : [],
+        keysTypes: r.keysTypes ?? {},
+        propsTypes: r.propsTypes ?? r.propertyTypes ?? {},
+        startCategory: String(r.startCategory ?? r.source ?? r.from ?? ""),
+        endCategory: String(r.endCategory ?? r.target ?? r.to ?? ""),
+      });
+    }
+
+    return { categories, relationships };
   }
 }

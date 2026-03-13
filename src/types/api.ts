@@ -1,3 +1,5 @@
+import type { DatabaseType } from "./graph-delta.js";
+
 // --- Pairing ---
 
 export interface PairStartRequest {
@@ -22,11 +24,12 @@ export interface PairStatusResponse {
 export interface CatalogProvider {
   name: string;
   transport: string;
+  databaseType: DatabaseType;
   datasets: string[];
   status: "connected" | "disconnected" | "error";
 }
 
-// --- Graph ---
+// --- Graph operations (gateway-specific body format) ---
 
 export interface GraphSchemaRequest {
   provider: string;
@@ -59,10 +62,27 @@ export interface GraphQueryRequest {
   cursor?: string;
 }
 
+// --- Proxy-compatible API (matches graphxr-database-proxy) ---
+
+export interface ProxyQueryRequest {
+  query: string;
+  parameters?: Record<string, unknown>;
+}
+
+export interface ProxyApiInfoResponse {
+  databaseType: DatabaseType;
+  urls: {
+    info: string;
+    query: string;
+    graphSchema: string;
+    schema: string;
+  };
+}
+
 // --- Health ---
 
 export interface HealthResponse {
   status: "ok";
   version: string;
-  providers: Array<{ name: string; status: string }>;
+  providers: Array<{ name: string; status: string; databaseType: DatabaseType }>;
 }

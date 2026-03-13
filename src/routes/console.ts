@@ -94,7 +94,7 @@ export function consoleRouter(
 
   router.post("/api/console/providers", async (req, res) => {
     try {
-      const { name, transport, command, args, env, endpoint, datasets } = req.body;
+      const { name, transport, databaseType, command, args, env, endpoint, datasets, toolMapping } = req.body;
       if (!name || !transport || !datasets?.length) {
         res.status(400).json({ error: "name, transport, and datasets are required" });
         return;
@@ -106,7 +106,7 @@ export function consoleRouter(
         return;
       }
 
-      const config = { name, transport, command, args, env, endpoint, datasets };
+      const config = { name, transport, databaseType: databaseType ?? "generic", command, args, env, endpoint, datasets, toolMapping };
       await mcpManager.addProvider(config);
       await configManager.updateProviders(
         providerRegistry.listProviders().map((p) => mcpManager.getProviderConfig(p.name) ?? p as any)
@@ -129,15 +129,17 @@ export function consoleRouter(
         return;
       }
 
-      const { transport, command, args, env, endpoint, datasets } = req.body;
+      const { transport, databaseType, command, args, env, endpoint, datasets, toolMapping } = req.body;
       const config = {
         name,
         transport: transport ?? existing.transport,
+        databaseType: databaseType ?? (existing as any).databaseType ?? "generic",
         command,
         args,
         env,
         endpoint,
         datasets: datasets ?? existing.datasets,
+        toolMapping,
       };
 
       await mcpManager.removeProvider(name);

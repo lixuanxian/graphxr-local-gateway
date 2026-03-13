@@ -1,4 +1,4 @@
-import type { GraphDelta } from "../../types/graph-delta.js";
+import type { GraphDelta, GraphSchema } from "../../types/graph-delta.js";
 
 export interface NeighborsOptions {
   edgeTypes?: string[];
@@ -25,6 +25,7 @@ export interface BaseAdapter {
   readonly providerName: string;
 
   getSchema(dataset: string): Promise<GraphDelta>;
+  getGraphSchema(dataset: string): Promise<GraphSchema>;
   getNeighbors(
     dataset: string,
     nodeId: string,
