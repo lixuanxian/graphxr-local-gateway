@@ -138,8 +138,11 @@ export class MCPAdapter implements BaseAdapter {
   }
 
   // -----------------------------------------------------------------------
-  // MCP tool invocation
+  // MCP tool invocation (with retry for transient failures)
   // -----------------------------------------------------------------------
+
+  private static readonly MAX_RETRIES = 2;
+  private static readonly RETRY_DELAY_MS = 500;
 
   private async callTool(
     toolName: string,
@@ -150,47 +153,67 @@ export class MCPAdapter implements BaseAdapter {
       tool: toolName,
     });
 
-    let response;
-    try {
-      response = await this.client.callTool({
-        name: toolName,
-        arguments: args,
-      });
-    } catch (err: any) {
-      const message = err.message ?? String(err);
-      logger.error(
-        `MCP tool call failed: ${this.providerName}/${toolName}`,
-        message
-      );
-      throw new Error(
-        `MCP tool "${toolName}" on provider "${this.providerName}" failed: ${message}`
-      );
-    }
+    let lastError: Error | undefined;
 
-    // Check for MCP-level error responses
-    if (response.isError) {
-      const errorText = response.content
-        ?.filter((c: any) => c.type === "text")
-        .map((c: any) => c.text)
-        .join("\n") ?? "Unknown MCP error";
-      logger.error(`MCP tool error: ${this.providerName}/${toolName}`, errorText);
-      throw new Error(`MCP tool "${toolName}" returned error: ${errorText}`);
-    }
+    for (let attempt = 0; attempt <= MCPAdapter.MAX_RETRIES; attempt++) {
+      try {
+        const response = await this.client.callTool({
+          name: toolName,
+          arguments: args,
+        });
 
-    if (response.content && Array.isArray(response.content)) {
-      const textContent = response.content.find(
-        (c: any) => c.type === "text"
-      );
-      if (textContent) {
-        try {
-          return JSON.parse((textContent as any).text);
-        } catch {
-          return (textContent as any).text;
+        // Check for MCP-level error responses (not retryable)
+        if (response.isError) {
+          const errorText = response.content
+            ?.filter((c: any) => c.type === "text")
+            .map((c: any) => c.text)
+            .join("\n") ?? "Unknown MCP error";
+          logger.error(`MCP tool error: ${this.providerName}/${toolName}`, errorText);
+          throw new Error(`MCP tool "${toolName}" returned error: ${errorText}`);
+        }
+
+        if (response.content && Array.isArray(response.content)) {
+          const textContent = response.content.find(
+            (c: any) => c.type === "text"
+          );
+          if (textContent) {
+            try {
+              return JSON.parse((textContent as any).text);
+            } catch {
+              return (textContent as any).text;
+            }
+          }
+        }
+
+        return response;
+      } catch (err: any) {
+        lastError = err;
+
+        // Don't retry MCP-level errors (business logic errors)
+        if (err.message?.includes("returned error:")) {
+          throw err;
+        }
+
+        // Retry on transient errors (connection, timeout, etc.)
+        if (attempt < MCPAdapter.MAX_RETRIES) {
+          const delay = MCPAdapter.RETRY_DELAY_MS * (attempt + 1);
+          logger.warn(
+            `MCP call ${this.providerName}/${toolName} failed (attempt ${attempt + 1}/${MCPAdapter.MAX_RETRIES + 1}), retrying in ${delay}ms:`,
+            err.message
+          );
+          await sleep(delay);
         }
       }
     }
 
-    return response;
+    const message = lastError?.message ?? "Unknown error";
+    logger.error(
+      `MCP tool call failed after ${MCPAdapter.MAX_RETRIES + 1} attempts: ${this.providerName}/${toolName}`,
+      message
+    );
+    throw new Error(
+      `MCP tool "${toolName}" on provider "${this.providerName}" failed after retries: ${message}`
+    );
   }
 
   // -----------------------------------------------------------------------
@@ -421,6 +444,10 @@ export class MCPAdapter implements BaseAdapter {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function escapeQueryParam(value: string): string {
   return value.replace(/'/g, "\\'").replace(/\\/g, "\\\\");
