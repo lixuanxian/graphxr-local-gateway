@@ -236,20 +236,23 @@ function autoDetectToolMapping(
   const mapping: Record<string, string> = {};
   const toolSet = new Set(tools);
 
-  // Schema tool detection
+  // Schema tool detection (ordered by preference)
   const schemaCandidates = [
+    // Neo4j official MCP server
+    "get-schema",
+    // Neo4j Labs mcp-neo4j-cypher
     "get_schema",
+    // Spanner MCP Toolbox
+    "spanner-list-graphs",
+    "spanner-list-tables",
+    // Generic patterns
     "get_graph_schema",
     "describe_graph",
     "schema",
     "graphSchema",
     "get_node_types",
-    // Neo4j specific
     "get_neo4j_schema",
-    "neo4j_get_schema",
-    // Spanner specific
     "get_spanner_schema",
-    "spanner_get_schema",
   ];
   for (const c of schemaCandidates) {
     if (toolSet.has(c)) {
@@ -258,24 +261,27 @@ function autoDetectToolMapping(
     }
   }
 
-  // Query tool detection
+  // Query tool detection (ordered by preference)
   const queryCandidates = [
-    // Generic
+    // Neo4j official MCP server
+    "read-cypher",
+    // Neo4j Labs mcp-neo4j-cypher
+    "run_read_query",
+    // Spanner MCP Toolbox
+    "spanner-sql",
+    "spanner-execute-sql",
+    // Generic patterns
     "run_query",
     "execute_query",
     "query",
-    // Neo4j specific
     "run_cypher_query",
     "execute_cypher",
     "cypher_query",
-    "neo4j_query",
     "read_neo4j_cypher",
     "write_neo4j_cypher",
-    // Spanner specific
     "run_gql_query",
     "execute_gql",
     "spanner_query",
-    "run_spanner_query",
   ];
   for (const c of queryCandidates) {
     if (toolSet.has(c)) {
@@ -295,7 +301,7 @@ function autoDetectToolMapping(
   for (const c of neighborsCandidates) {
     if (toolSet.has(c)) {
       mapping.neighbors = c;
-      mapping.expand = c; // expand usually reuses neighbors
+      mapping.expand = c;
       break;
     }
   }

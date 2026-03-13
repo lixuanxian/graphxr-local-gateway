@@ -2,6 +2,7 @@ import { Router } from "express";
 import type { PairingManager } from "../pairing/pairing-manager.js";
 import type { MCPManager } from "../mcp/mcp-manager.js";
 import type { ConfigManager } from "../config/config-manager.js";
+import { PROVIDER_TEMPLATES, getTemplate } from "../mcp/provider-templates.js";
 import { logger } from "../utils/logger.js";
 
 const startTime = Date.now();
@@ -87,7 +88,11 @@ export function consoleRouter(
   // ─── Providers (read) ────────────────────────────────────
 
   router.get("/api/console/providers", (_req, res) => {
-    res.json({ providers: providerRegistry.listProviders() });
+    const providers = providerRegistry.listProviders().map((p) => ({
+      ...p,
+      tools: mcpManager.getProviderTools(p.name) ?? [],
+    }));
+    res.json({ providers });
   });
 
   // ─── Providers (CRUD) ────────────────────────────────────
@@ -193,6 +198,38 @@ export function consoleRouter(
       logger.error("Failed to restart provider:", err);
       res.status(500).json({ error: err.message });
     }
+  });
+
+  // ─── Provider Templates ─────────────────────────────────
+
+  router.get("/api/console/templates", (_req, res) => {
+    res.json({ templates: PROVIDER_TEMPLATES });
+  });
+
+  router.get("/api/console/templates/:id", (req, res) => {
+    const template = getTemplate(req.params.id);
+    if (!template) {
+      res.status(404).json({ error: `Template "${req.params.id}" not found` });
+      return;
+    }
+    res.json({ template });
+  });
+
+  // ─── Provider Tools (MCP introspection) ────────────────
+
+  router.get("/api/console/providers/:name/tools", (req, res) => {
+    const { name } = req.params;
+    const tools = mcpManager.getProviderTools(name);
+    if (tools === undefined) {
+      res.status(404).json({ error: `Provider "${name}" not found or not connected via MCP` });
+      return;
+    }
+    const config = mcpManager.getProviderConfig(name);
+    res.json({
+      provider: name,
+      tools,
+      toolMapping: config?.toolMapping ?? {},
+    });
   });
 
   // ─── Self-Test ───────────────────────────────────────────
