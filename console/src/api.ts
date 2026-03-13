@@ -101,6 +101,29 @@ export const getProviderTools = (name: string) =>
     `/api/console/providers/${encodeURIComponent(name)}/tools`
   );
 
+// --- Provider Schema ---
+export interface GraphSchema {
+  categories: Array<{
+    name: string;
+    count?: number;
+    properties?: Array<{ name: string; type: string }>;
+  }>;
+  relationships: Array<{
+    type: string;
+    startCategory: string;
+    endCategory: string;
+    count?: number;
+    properties?: Array<{ name: string; type: string }>;
+  }>;
+}
+
+export const getProviderSchema = (name: string, dataset?: string) => {
+  const params = dataset ? `?dataset=${encodeURIComponent(dataset)}` : "";
+  return fetchJSON<{ provider: string; dataset: string; schema: GraphSchema }>(
+    `/api/console/providers/${encodeURIComponent(name)}/schema${params}`
+  );
+};
+
 // --- Provider Templates ---
 export interface ProviderTemplate {
   id: string;

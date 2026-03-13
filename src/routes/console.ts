@@ -215,6 +215,28 @@ export function consoleRouter(
     res.json({ template });
   });
 
+  // ─── Provider Schema (console-accessible) ───────────────
+
+  router.get("/api/console/providers/:name/schema", async (req, res) => {
+    const { name } = req.params;
+    const adapter = providerRegistry.getAdapter(name);
+    if (!adapter) {
+      res.status(404).json({ error: `Provider "${name}" not found` });
+      return;
+    }
+
+    const datasets = providerRegistry.listDatasets(name);
+    const dataset = (req.query.dataset as string) ?? datasets?.[0] ?? "default";
+
+    try {
+      const schema = await adapter.getGraphSchema(dataset);
+      res.json({ provider: name, dataset, schema });
+    } catch (err: any) {
+      logger.error(`Failed to get schema for "${name}":`, err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ─── Provider Tools (MCP introspection) ────────────────
 
   router.get("/api/console/providers/:name/tools", (req, res) => {
