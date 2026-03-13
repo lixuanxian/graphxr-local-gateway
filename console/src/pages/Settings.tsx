@@ -10,9 +10,23 @@ import {
   Spin,
   Alert,
   Space,
+  Descriptions,
+  Divider,
 } from "antd";
 import { App as AntdApp } from "antd";
+import { SaveOutlined, ReloadOutlined } from "@ant-design/icons";
 import { getSettings, updateSettings, type Settings as SettingsType } from "../api.ts";
+
+function formatDuration(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  const parts: string[] = [];
+  if (h > 0) parts.push(`${h}h`);
+  if (m > 0) parts.push(`${m}m`);
+  if (s > 0 && h === 0) parts.push(`${s}s`);
+  return parts.join(" ") || "0s";
+}
 
 export default function Settings() {
   const [settings, setSettings] = useState<SettingsType | null>(null);
@@ -68,33 +82,53 @@ export default function Settings() {
   if (error) return <Alert type="error" message="Failed to load settings" description={error} />;
   if (!settings) return null;
 
+  const tokenTTL = Form.useWatch("tokenTTL", form);
+  const pairingTimeout = Form.useWatch("pairingTimeout", form);
+
   return (
     <div>
-      <Typography.Title level={4} style={{ marginBottom: 24 }}>
-        Settings
-      </Typography.Title>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+        <Typography.Title level={4} style={{ margin: 0 }}>
+          Settings
+        </Typography.Title>
+        <Button icon={<ReloadOutlined />} onClick={load}>
+          Reload
+        </Button>
+      </div>
 
-      <Card style={{ maxWidth: 640 }}>
+      {/* Read-only info */}
+      <Card size="small" style={{ marginBottom: 16, maxWidth: 640 }}>
+        <Descriptions column={2} size="small">
+          <Descriptions.Item label="Listen Port">
+            <Typography.Text code>127.0.0.1:{settings.port}</Typography.Text>
+          </Descriptions.Item>
+          <Descriptions.Item label="Rate Limit">
+            {settings.rateLimit.max} req / {settings.rateLimit.windowMs / 1000}s
+          </Descriptions.Item>
+        </Descriptions>
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          Port and rate limit require a server restart to change.
+        </Typography.Text>
+      </Card>
+
+      <Card style={{ maxWidth: 640 }} title="Runtime Settings">
         <Form form={form} layout="vertical">
-          {/* Port (read-only) */}
-          <Form.Item label="Port">
-            <Typography.Text code>{settings.port}</Typography.Text>
-            <Typography.Text type="secondary" style={{ marginLeft: 8 }}>
-              (requires restart to change)
-            </Typography.Text>
-          </Form.Item>
-
           {/* Allowed Origins */}
-          <Form.Item label="Allowed Origins">
+          <Form.Item
+            label="CORS Allowed Origins"
+            extra="Origins that are allowed to make requests to the gateway API."
+          >
             <Space direction="vertical" style={{ width: "100%" }}>
               <Space>
                 <Switch checked={allowAll} onChange={setAllowAll} />
-                <Typography.Text>Allow all origins</Typography.Text>
+                <Typography.Text>
+                  {allowAll ? "All origins allowed (development mode)" : "Specific origins only"}
+                </Typography.Text>
               </Space>
               {!allowAll && (
                 <Select
                   mode="tags"
-                  placeholder="Enter origins (e.g. https://example.com)"
+                  placeholder="Enter origins (e.g. https://graphxr.kineviz.com)"
                   value={origins}
                   onChange={setOrigins}
                   style={{ width: "100%" }}
@@ -104,33 +138,44 @@ export default function Settings() {
             </Space>
           </Form.Item>
 
+          <Divider />
+
           {/* Token TTL */}
-          <Form.Item label="Token TTL" name="tokenTTL">
+          <Form.Item
+            label="Bearer Token TTL"
+            name="tokenTTL"
+            extra={`Tokens expire after ${formatDuration(tokenTTL ?? settings.tokenTTL)}. Clients must re-pair after expiration.`}
+          >
             <InputNumber
               min={60}
               max={604800}
               addonAfter="seconds"
-              style={{ width: 200 }}
+              style={{ width: 220 }}
             />
           </Form.Item>
-          {form.getFieldValue("tokenTTL") && (
-            <Typography.Text type="secondary" style={{ display: "block", marginTop: -16, marginBottom: 16 }}>
-              = {Math.floor((form.getFieldValue("tokenTTL") || 0) / 3600)}h{" "}
-              {Math.floor(((form.getFieldValue("tokenTTL") || 0) % 3600) / 60)}m
-            </Typography.Text>
-          )}
 
           {/* Pairing Timeout */}
-          <Form.Item label="Pairing Timeout" name="pairingTimeout">
+          <Form.Item
+            label="Pairing Request Timeout"
+            name="pairingTimeout"
+            extra={`Users have ${formatDuration(pairingTimeout ?? settings.pairingTimeout)} to approve or deny a pairing request.`}
+          >
             <InputNumber
               min={30}
               max={3600}
               addonAfter="seconds"
-              style={{ width: 200 }}
+              style={{ width: 220 }}
             />
           </Form.Item>
 
-          <Button type="primary" loading={saving} onClick={handleSave}>
+          <Divider />
+
+          <Button
+            type="primary"
+            icon={<SaveOutlined />}
+            loading={saving}
+            onClick={handleSave}
+          >
             Save Settings
           </Button>
         </Form>
