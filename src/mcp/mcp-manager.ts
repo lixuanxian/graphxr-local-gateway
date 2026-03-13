@@ -13,7 +13,21 @@ interface ManagedProvider {
   client?: Client;
   transport?: Transport;
   availableTools?: string[];
+  lastHealthCheck?: number;
+  consecutiveFailures: number;
+  connectedAt?: number;
 }
+
+export interface ConnectionEvent {
+  provider: string;
+  event: "connected" | "disconnected" | "error" | "reconnecting" | "health_ok" | "health_fail";
+  timestamp: number;
+  detail?: string;
+}
+
+const MAX_RECONNECT_ATTEMPTS = 5;
+const HEALTH_CHECK_INTERVAL_MS = 30_000; // 30 seconds
+const MAX_CONNECTION_EVENTS = 200;
 
 /**
  * Manages MCP server connections and provider lifecycle.
@@ -22,6 +36,8 @@ interface ManagedProvider {
 export class MCPManager {
   private managed = new Map<string, ManagedProvider>();
   readonly registry = new ProviderRegistry();
+  private healthTimer?: ReturnType<typeof setInterval>;
+  private connectionEvents: ConnectionEvent[] = [];
 
   /**
    * Initialize all providers from config.
@@ -42,11 +58,14 @@ export class MCPManager {
         await this.connectProvider(config);
       } catch (err) {
         logger.error(`Failed to connect provider "${config.name}":`, err);
-        this.managed.set(config.name, { config });
+        this.managed.set(config.name, { config, consecutiveFailures: 1 });
         this.registry.register(config, null as any);
         this.registry.setStatus(config.name, "error");
+        this.pushEvent(config.name, "error", String(err));
       }
     }
+
+    this.startHealthChecks();
   }
 
   /**
@@ -199,14 +218,139 @@ export class MCPManager {
       client,
       transport,
       availableTools: toolNames,
+      lastHealthCheck: Date.now(),
+      consecutiveFailures: 0,
+      connectedAt: Date.now(),
     });
     this.registry.register(config, adapter);
+    this.pushEvent(config.name, "connected", `${toolNames.length} tools discovered`);
+  }
+
+  // -----------------------------------------------------------------------
+  // Health monitoring & auto-reconnect
+  // -----------------------------------------------------------------------
+
+  private startHealthChecks(): void {
+    if (this.healthTimer) return;
+    this.healthTimer = setInterval(() => {
+      this.runHealthChecks().catch((err) =>
+        logger.error("Health check cycle failed:", err)
+      );
+    }, HEALTH_CHECK_INTERVAL_MS);
+    // Don't prevent process exit
+    if (this.healthTimer.unref) this.healthTimer.unref();
+    logger.debug("Health check loop started");
+  }
+
+  private stopHealthChecks(): void {
+    if (this.healthTimer) {
+      clearInterval(this.healthTimer);
+      this.healthTimer = undefined;
+    }
+  }
+
+  private async runHealthChecks(): Promise<void> {
+    for (const [name, managed] of this.managed) {
+      if (!managed.client) {
+        // Provider in error state — attempt reconnect
+        await this.attemptReconnect(name, managed);
+        continue;
+      }
+
+      try {
+        // Ping the MCP server by listing tools (lightweight operation)
+        await managed.client.listTools();
+        managed.lastHealthCheck = Date.now();
+        managed.consecutiveFailures = 0;
+
+        // If status was error, update to connected
+        const info = this.registry.listProviders().find((p) => p.name === name);
+        if (info?.status === "error") {
+          this.registry.setStatus(name, "connected");
+          this.pushEvent(name, "health_ok", "Connection recovered");
+          logger.info(`Provider "${name}" health restored`);
+        }
+      } catch (err) {
+        managed.consecutiveFailures++;
+        this.pushEvent(name, "health_fail", String(err));
+        logger.warn(`Provider "${name}" health check failed (${managed.consecutiveFailures}x):`, err);
+
+        if (managed.consecutiveFailures >= 2) {
+          this.registry.setStatus(name, "error");
+          // Try to reconnect
+          await this.attemptReconnect(name, managed);
+        }
+      }
+    }
+  }
+
+  private async attemptReconnect(name: string, managed: ManagedProvider): Promise<void> {
+    if (managed.consecutiveFailures > MAX_RECONNECT_ATTEMPTS) {
+      // Stop trying after too many failures
+      return;
+    }
+
+    this.pushEvent(name, "reconnecting");
+    logger.info(`Attempting to reconnect provider "${name}" (attempt ${managed.consecutiveFailures})`);
+
+    try {
+      // Close existing client if any
+      if (managed.client) {
+        try { await managed.client.close(); } catch { /* ignore */ }
+      }
+
+      // Remove from registry (but keep in managed map with config)
+      const config = managed.config;
+      this.registry.unregister(name);
+      this.managed.delete(name);
+
+      // Reconnect
+      await this.connectProvider(config);
+      logger.info(`Provider "${name}" reconnected successfully`);
+    } catch (err) {
+      logger.error(`Reconnect failed for "${name}":`, err);
+      // Re-register as errored so it stays visible
+      if (!this.managed.has(name)) {
+        this.managed.set(name, {
+          config: managed.config,
+          consecutiveFailures: managed.consecutiveFailures + 1,
+        });
+        this.registry.register(managed.config, null as any);
+        this.registry.setStatus(name, "error");
+      }
+      this.pushEvent(name, "error", `Reconnect failed: ${err}`);
+    }
+  }
+
+  /**
+   * Get recent connection events for monitoring.
+   */
+  getConnectionEvents(limit = 50): ConnectionEvent[] {
+    return this.connectionEvents.slice(-limit);
+  }
+
+  /**
+   * Get events for a specific provider.
+   */
+  getProviderEvents(name: string, limit = 20): ConnectionEvent[] {
+    return this.connectionEvents
+      .filter((e) => e.provider === name)
+      .slice(-limit);
+  }
+
+  private pushEvent(provider: string, event: ConnectionEvent["event"], detail?: string): void {
+    this.connectionEvents.push({ provider, event, timestamp: Date.now(), detail });
+    // Trim old events
+    if (this.connectionEvents.length > MAX_CONNECTION_EVENTS) {
+      this.connectionEvents = this.connectionEvents.slice(-MAX_CONNECTION_EVENTS);
+    }
   }
 
   /**
    * Gracefully shut down all MCP connections.
    */
   async shutdown(): Promise<void> {
+    this.stopHealthChecks();
     for (const [name, managed] of this.managed) {
       try {
         if (managed.client) {

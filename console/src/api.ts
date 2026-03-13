@@ -186,6 +186,24 @@ export const runSelfTest = () =>
     { method: "POST" }
   );
 
+// --- Connection Events ---
+export interface ConnectionEvent {
+  provider: string;
+  event: "connected" | "disconnected" | "error" | "reconnecting" | "health_ok" | "health_fail";
+  timestamp: number;
+  detail?: string;
+}
+
+export const getConnectionEvents = (limit = 50) =>
+  fetchJSON<{ events: ConnectionEvent[] }>(
+    `/api/console/events?limit=${limit}`
+  ).then((r) => r.events);
+
+export const getProviderEvents = (name: string, limit = 20) =>
+  fetchJSON<{ provider: string; events: ConnectionEvent[] }>(
+    `/api/console/providers/${encodeURIComponent(name)}/events?limit=${limit}`
+  ).then((r) => r.events);
+
 // --- Health ---
 export interface HealthResponse {
   status: string;

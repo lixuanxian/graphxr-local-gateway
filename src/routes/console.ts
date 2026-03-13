@@ -232,6 +232,20 @@ export function consoleRouter(
     });
   });
 
+  // ─── Connection Events ──────────────────────────────────
+
+  router.get("/api/console/events", (_req, res) => {
+    const limit = parseInt(_req.query.limit as string) || 50;
+    res.json({ events: mcpManager.getConnectionEvents(limit) });
+  });
+
+  router.get("/api/console/providers/:name/events", (req, res) => {
+    const { name } = req.params;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const events = mcpManager.getProviderEvents(name, limit);
+    res.json({ provider: name, events });
+  });
+
   // ─── Self-Test ───────────────────────────────────────────
 
   router.post("/api/console/self-test", async (_req, res) => {
