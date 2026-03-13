@@ -1,5 +1,19 @@
 import { useEffect, useState } from "react";
-import { Table, Typography, Tag, Spin, Button, Space, Popconfirm, Tooltip } from "antd";
+import {
+  Table,
+  Typography,
+  Tag,
+  Spin,
+  Button,
+  Space,
+  Popconfirm,
+  Tooltip,
+  Drawer,
+  Descriptions,
+  List,
+  Timeline,
+  Divider,
+} from "antd";
 import { App as AntdApp } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import {
@@ -8,6 +22,12 @@ import {
   DeleteOutlined,
   ReloadOutlined,
   ApiOutlined,
+  InfoCircleOutlined,
+  LinkOutlined,
+  DisconnectOutlined,
+  WarningOutlined,
+  SyncOutlined,
+  CheckCircleOutlined,
 } from "@ant-design/icons";
 import StatusBadge from "../components/StatusBadge.tsx";
 import ProviderModal from "../components/ProviderModal.tsx";
@@ -17,8 +37,12 @@ import {
   updateProvider,
   deleteProvider,
   restartProvider,
+  getProviderTools,
+  getProviderEvents,
   type ProviderInfo,
   type ProviderConfig,
+  type ProviderTools,
+  type ConnectionEvent,
 } from "../api.ts";
 
 const DB_TYPE_COLORS: Record<string, string> = {
@@ -33,6 +57,15 @@ const DB_TYPE_COLORS: Record<string, string> = {
   generic: "default",
 };
 
+const EVENT_CONFIG: Record<string, { color: string; icon: React.ReactNode }> = {
+  connected: { color: "green", icon: <LinkOutlined /> },
+  disconnected: { color: "red", icon: <DisconnectOutlined /> },
+  error: { color: "red", icon: <WarningOutlined /> },
+  reconnecting: { color: "orange", icon: <SyncOutlined spin /> },
+  health_ok: { color: "green", icon: <CheckCircleOutlined /> },
+  health_fail: { color: "orange", icon: <WarningOutlined /> },
+};
+
 export default function Providers() {
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,6 +73,12 @@ export default function Providers() {
   const [editData, setEditData] = useState<ProviderConfig | null>(null);
   const [saving, setSaving] = useState(false);
   const { message } = AntdApp.useApp();
+
+  // Detail drawer state
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [detailProvider, setDetailProvider] = useState<ProviderInfo | null>(null);
+  const [detailTools, setDetailTools] = useState<ProviderTools | null>(null);
+  const [detailEvents, setDetailEvents] = useState<ConnectionEvent[]>([]);
 
   const load = () => {
     setLoading(true);
@@ -51,6 +90,19 @@ export default function Providers() {
   useEffect(() => {
     load();
   }, []);
+
+  const openDetail = async (record: ProviderInfo) => {
+    setDetailProvider(record);
+    setDrawerOpen(true);
+    // Load tools and events in parallel
+    Promise.all([
+      getProviderTools(record.name).catch(() => null),
+      getProviderEvents(record.name, 20).catch(() => []),
+    ]).then(([tools, events]) => {
+      setDetailTools(tools);
+      setDetailEvents(events);
+    });
+  };
 
   const handleAdd = () => {
     setEditData(null);
@@ -111,7 +163,11 @@ export default function Providers() {
       title: "Name",
       dataIndex: "name",
       key: "name",
-      render: (name: string) => <Typography.Text strong>{name}</Typography.Text>,
+      render: (name: string, record: ProviderInfo) => (
+        <Button type="link" style={{ padding: 0 }} onClick={() => openDetail(record)}>
+          <Typography.Text strong>{name}</Typography.Text>
+        </Button>
+      ),
     },
     {
       title: "Type",
@@ -166,16 +222,25 @@ export default function Providers() {
       key: "actions",
       render: (_, record) => (
         <Space size="small">
+          <Tooltip title="Details">
+            <Button
+              size="small"
+              icon={<InfoCircleOutlined />}
+              onClick={() => openDetail(record)}
+            />
+          </Tooltip>
           <Button
             size="small"
             icon={<EditOutlined />}
             onClick={() => handleEdit(record)}
           />
-          <Button
-            size="small"
-            icon={<ReloadOutlined />}
-            onClick={() => handleRestart(record.name)}
-          />
+          <Tooltip title="Restart connection">
+            <Button
+              size="small"
+              icon={<ReloadOutlined />}
+              onClick={() => handleRestart(record.name)}
+            />
+          </Tooltip>
           <Popconfirm
             title={`Delete "${record.name}"?`}
             onConfirm={() => handleDelete(record.name)}
@@ -197,9 +262,14 @@ export default function Providers() {
         <Typography.Title level={4} style={{ margin: 0 }}>
           Providers
         </Typography.Title>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
-          Add Provider
-        </Button>
+        <Space>
+          <Button icon={<ReloadOutlined />} onClick={load}>
+            Refresh
+          </Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
+            Add Provider
+          </Button>
+        </Space>
       </div>
       <Table
         columns={columns}
@@ -215,6 +285,124 @@ export default function Providers() {
         onCancel={() => setModalOpen(false)}
         loading={saving}
       />
+
+      {/* Provider Detail Drawer */}
+      <Drawer
+        title={
+          detailProvider ? (
+            <Space>
+              <Typography.Text strong>{detailProvider.name}</Typography.Text>
+              <StatusBadge status={detailProvider.status} />
+            </Space>
+          ) : "Provider Details"
+        }
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        width={480}
+      >
+        {detailProvider && (
+          <>
+            <Descriptions column={1} size="small">
+              <Descriptions.Item label="Database Type">
+                <Tag color={DB_TYPE_COLORS[detailProvider.databaseType] ?? "default"}>
+                  {detailProvider.databaseType.toUpperCase()}
+                </Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="Transport">
+                <Tag>{detailProvider.transport.toUpperCase()}</Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="Datasets">
+                <Space wrap>
+                  {detailProvider.datasets.map((d) => (
+                    <Tag key={d} color="blue">{d}</Tag>
+                  ))}
+                </Space>
+              </Descriptions.Item>
+              <Descriptions.Item label="Status">
+                <StatusBadge status={detailProvider.status} />
+              </Descriptions.Item>
+            </Descriptions>
+
+            {/* MCP Tools */}
+            <Divider orientation="left" style={{ fontSize: 13 }}>
+              <ApiOutlined /> MCP Tools
+            </Divider>
+            {detailTools ? (
+              <>
+                {detailTools.tools.length > 0 ? (
+                  <List
+                    size="small"
+                    dataSource={detailTools.tools}
+                    renderItem={(tool) => {
+                      const mappedAs = Object.entries(detailTools.toolMapping)
+                        .filter(([, v]) => v === tool)
+                        .map(([k]) => k);
+                      return (
+                        <List.Item>
+                          <Typography.Text code>{tool}</Typography.Text>
+                          {mappedAs.length > 0 && (
+                            <Space style={{ marginLeft: 8 }}>
+                              {mappedAs.map((m) => (
+                                <Tag key={m} color="geekblue" style={{ fontSize: 11 }}>
+                                  {m}
+                                </Tag>
+                              ))}
+                            </Space>
+                          )}
+                        </List.Item>
+                      );
+                    }}
+                  />
+                ) : (
+                  <Typography.Text type="secondary">No tools discovered</Typography.Text>
+                )}
+              </>
+            ) : (
+              <Typography.Text type="secondary">
+                Tools information not available
+              </Typography.Text>
+            )}
+
+            {/* Connection Events */}
+            <Divider orientation="left" style={{ fontSize: 13 }}>
+              <LinkOutlined /> Recent Events
+            </Divider>
+            {detailEvents.length > 0 ? (
+              <Timeline
+                items={detailEvents
+                  .slice()
+                  .reverse()
+                  .slice(0, 10)
+                  .map((evt) => {
+                    const cfg = EVENT_CONFIG[evt.event] ?? { color: "gray", icon: null };
+                    const time = new Date(evt.timestamp).toLocaleTimeString();
+                    return {
+                      color: cfg.color,
+                      dot: cfg.icon,
+                      children: (
+                        <div>
+                          <Tag color={cfg.color} style={{ fontSize: 11 }}>{evt.event}</Tag>
+                          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                            {time}
+                          </Typography.Text>
+                          {evt.detail && (
+                            <div>
+                              <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+                                {evt.detail.length > 60 ? evt.detail.slice(0, 60) + "..." : evt.detail}
+                              </Typography.Text>
+                            </div>
+                          )}
+                        </div>
+                      ),
+                    };
+                  })}
+              />
+            ) : (
+              <Typography.Text type="secondary">No connection events</Typography.Text>
+            )}
+          </>
+        )}
+      </Drawer>
     </div>
   );
 }
