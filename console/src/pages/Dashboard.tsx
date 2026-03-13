@@ -1,13 +1,33 @@
 import { useEffect, useState } from "react";
-import { Card, Col, Row, Statistic, Typography, Spin, Alert, Button, Tag, List } from "antd";
+import { Card, Col, Row, Statistic, Typography, Spin, Alert, Button, Tag, List, Timeline } from "antd";
 import {
   CheckCircleOutlined,
   ClockCircleOutlined,
   ApiOutlined,
   KeyOutlined,
   ExperimentOutlined,
+  LinkOutlined,
+  DisconnectOutlined,
+  WarningOutlined,
+  SyncOutlined,
 } from "@ant-design/icons";
-import { getStats, runSelfTest, type Stats, type SelfTestResult } from "../api.ts";
+import {
+  getStats,
+  runSelfTest,
+  getConnectionEvents,
+  type Stats,
+  type SelfTestResult,
+  type ConnectionEvent,
+} from "../api.ts";
+
+const EVENT_CONFIG: Record<string, { color: string; icon: React.ReactNode }> = {
+  connected: { color: "green", icon: <LinkOutlined /> },
+  disconnected: { color: "red", icon: <DisconnectOutlined /> },
+  error: { color: "red", icon: <WarningOutlined /> },
+  reconnecting: { color: "orange", icon: <SyncOutlined spin /> },
+  health_ok: { color: "green", icon: <CheckCircleOutlined /> },
+  health_fail: { color: "orange", icon: <WarningOutlined /> },
+};
 
 export default function Dashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
@@ -15,11 +35,15 @@ export default function Dashboard() {
   const [testResults, setTestResults] = useState<SelfTestResult[] | null>(null);
   const [testOverall, setTestOverall] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
+  const [events, setEvents] = useState<ConnectionEvent[]>([]);
 
   const load = () => {
     getStats()
       .then((s) => { setStats(s); setError(null); })
       .catch((e) => setError(e.message));
+    getConnectionEvents(15)
+      .then(setEvents)
+      .catch(() => {});
   };
 
   useEffect(() => {
@@ -110,9 +134,59 @@ export default function Dashboard() {
         </Col>
       </Row>
 
-      {/* Self-Test */}
       <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
-        <Col span={24}>
+        {/* Connection Events */}
+        <Col xs={24} lg={12}>
+          <Card
+            title={
+              <span>
+                <LinkOutlined style={{ marginRight: 8 }} />
+                Connection Events
+              </span>
+            }
+            size="small"
+            style={{ minHeight: 200 }}
+          >
+            {events.length === 0 ? (
+              <Typography.Text type="secondary">No connection events yet.</Typography.Text>
+            ) : (
+              <Timeline
+                items={events
+                  .slice()
+                  .reverse()
+                  .map((evt) => {
+                    const cfg = EVENT_CONFIG[evt.event] ?? { color: "gray", icon: null };
+                    const time = new Date(evt.timestamp).toLocaleTimeString();
+                    return {
+                      color: cfg.color,
+                      dot: cfg.icon,
+                      children: (
+                        <div>
+                          <Tag color={cfg.color} style={{ marginRight: 8 }}>
+                            {evt.event}
+                          </Tag>
+                          <Typography.Text strong>{evt.provider}</Typography.Text>
+                          <Typography.Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
+                            {time}
+                          </Typography.Text>
+                          {evt.detail && (
+                            <div>
+                              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                {evt.detail.length > 80 ? evt.detail.slice(0, 80) + "..." : evt.detail}
+                              </Typography.Text>
+                            </div>
+                          )}
+                        </div>
+                      ),
+                    };
+                  })}
+              />
+            )}
+          </Card>
+        </Col>
+
+        {/* Self-Test */}
+        <Col xs={24} lg={12}>
           <Card
             title={
               <span>
@@ -130,6 +204,8 @@ export default function Dashboard() {
                 Run Test
               </Button>
             }
+            size="small"
+            style={{ minHeight: 200 }}
           >
             {!testResults && !testing && (
               <Typography.Text type="secondary">
