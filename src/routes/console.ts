@@ -268,6 +268,52 @@ export function consoleRouter(
     res.json({ provider: name, events });
   });
 
+  // ─── Provider Test Query (console-accessible) ───────────
+
+  router.post("/api/console/providers/:name/test-query", async (req, res) => {
+    const { name } = req.params;
+    const adapter = providerRegistry.getAdapter(name);
+    if (!adapter) {
+      res.status(404).json({ error: `Provider "${name}" not found or not connected` });
+      return;
+    }
+
+    const datasets = providerRegistry.listDatasets(name);
+    const dataset = (req.body.dataset as string) ?? datasets?.[0] ?? "default";
+    const query = req.body.query as string;
+
+    if (!query) {
+      res.status(400).json({ error: "query field is required" });
+      return;
+    }
+
+    const startTime = Date.now();
+    try {
+      const result = await adapter.query(dataset, query, {
+        limit: req.body.limit ?? 25,
+      });
+      const elapsed = Date.now() - startTime;
+      res.json({
+        success: true,
+        provider: name,
+        dataset,
+        executionTime: elapsed,
+        nodeCount: result.nodes?.length ?? 0,
+        edgeCount: result.edges?.length ?? 0,
+        data: result,
+      });
+    } catch (err: any) {
+      const elapsed = Date.now() - startTime;
+      res.status(500).json({
+        success: false,
+        provider: name,
+        dataset,
+        executionTime: elapsed,
+        error: err.message,
+      });
+    }
+  });
+
   // ─── Self-Test ───────────────────────────────────────────
 
   router.post("/api/console/self-test", async (_req, res) => {

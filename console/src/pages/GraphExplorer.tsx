@@ -25,8 +25,7 @@ import {
 } from "@ant-design/icons";
 import {
   getProviders,
-  graphNeighbors,
-  graphQuery,
+  consoleTestQuery,
   type ProviderInfo,
 } from "../api.ts";
 
@@ -237,8 +236,13 @@ export default function GraphExplorer() {
     setLoading(true);
     setError(null);
     try {
-      const res = await graphNeighbors({ provider, dataset, nodeId, limit });
-      setResult(res);
+      // Use console test-query endpoint to generate a neighbors query
+      const dbType = selectedProvider?.databaseType ?? "generic";
+      const q = dbType === "neo4j" || dbType === "memgraph"
+        ? `MATCH (n)-[r]-(m) WHERE n.id = '${nodeId}' OR id(n) = ${/^\d+$/.test(nodeId) ? nodeId : `'${nodeId}'`} RETURN n, r, m LIMIT ${limit}`
+        : `MATCH (n)-[r]-(m) WHERE n.id = '${nodeId}' RETURN n, r, m LIMIT ${limit}`;
+      const res = await consoleTestQuery(provider, { dataset, query: q, limit });
+      setResult(res.data ?? res);
     } catch (e: any) {
       setError(e.message);
       setResult(null);
@@ -251,8 +255,8 @@ export default function GraphExplorer() {
     setLoading(true);
     setError(null);
     try {
-      const res = await graphQuery({ provider, dataset, query: queryStr, limit });
-      setResult(res);
+      const res = await consoleTestQuery(provider, { dataset, query: queryStr, limit });
+      setResult(res.data ?? res);
     } catch (e: any) {
       setError(e.message);
       setResult(null);

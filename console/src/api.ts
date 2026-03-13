@@ -236,7 +236,33 @@ export interface HealthResponse {
 
 export const getHealth = () => fetchJSON<HealthResponse>("/health");
 
-// --- Graph (for explorer) ---
+// --- Graph (for explorer via console API — no auth required) ---
+export interface TestQueryResult {
+  success: boolean;
+  provider: string;
+  dataset: string;
+  executionTime: number;
+  nodeCount?: number;
+  edgeCount?: number;
+  data?: any;
+  error?: string;
+}
+
+export const consoleTestQuery = (name: string, body: {
+  dataset?: string;
+  query: string;
+  limit?: number;
+}) =>
+  fetchJSON<TestQueryResult>(
+    `/api/console/providers/${encodeURIComponent(name)}/test-query`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }
+  );
+
+// --- Graph (authed endpoints for external clients) ---
 export const graphNeighbors = (body: {
   provider: string;
   dataset: string;
