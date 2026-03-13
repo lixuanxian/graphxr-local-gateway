@@ -46,10 +46,24 @@ async function main(): Promise<void> {
 
   // --- Start server (127.0.0.1 only) ---
   const server = app.listen(config.port, "127.0.0.1", () => {
+    const providers = mcpManager.registry.listProviders();
+    const connected = providers.filter((p) => p.status === "connected");
+    const errored = providers.filter((p) => p.status === "error");
+
     logger.info(`Gateway listening on http://127.0.0.1:${config.port}`);
+    logger.info(`Console: http://127.0.0.1:${config.port}/console/`);
     logger.info(
-      `Providers: ${mcpManager.registry.listProviders().map((p) => p.name).join(", ") || "none (mock mode)"}`
+      `Providers: ${connected.length} connected` +
+      (errored.length > 0 ? `, ${errored.length} errored` : "") +
+      (providers.length === 0 ? " (mock mode)" : "")
     );
+
+    if (connected.length > 0) {
+      for (const p of connected) {
+        const tools = mcpManager.getProviderTools(p.name);
+        logger.info(`  ${p.name} [${p.databaseType}/${p.transport}] — ${tools?.length ?? 0} tools`);
+      }
+    }
   });
 
   // --- Graceful shutdown ---
