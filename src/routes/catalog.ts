@@ -6,7 +6,14 @@ export function catalogRouter(providerRegistry: ProviderRegistry): Router {
 
   // GET /catalog/providers
   router.get("/catalog/providers", (_req, res) => {
-    res.json({ providers: providerRegistry.listProviders() });
+    const providers = providerRegistry.listProviders().map((p) => ({
+      name: p.name,
+      transport: p.transport,
+      databaseType: p.databaseType,
+      datasets: p.datasets,
+      status: p.status,
+    }));
+    res.json({ providers });
   });
 
   // GET /catalog/datasets?provider=xxx
