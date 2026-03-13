@@ -86,6 +86,12 @@ export class MCPAdapter implements BaseAdapter {
     nodeId: string,
     opts: NeighborsOptions
   ): Promise<GraphDelta> {
+    // If no dedicated neighbors tool, use query tool with generated query
+    if (this.shouldUseQueryFallback("neighbors")) {
+      const q = this.generateNeighborsQuery(nodeId, opts);
+      return this.query(dataset, q, { limit: opts.limit ?? 50 });
+    }
+
     const result = await this.callTool(this.toolMapping.neighbors, {
       dataset,
       nodeId,
@@ -101,6 +107,12 @@ export class MCPAdapter implements BaseAdapter {
     nodeIds: string[],
     opts: ExpandOptions
   ): Promise<GraphDelta> {
+    // If no dedicated expand tool, use query tool with generated query
+    if (this.shouldUseQueryFallback("expand")) {
+      const q = this.generateExpandQuery(nodeIds, opts);
+      return this.query(dataset, q, { limit: opts.limit ?? 100 });
+    }
+
     const result = await this.callTool(this.toolMapping.expand, {
       dataset,
       nodeIds,
@@ -313,4 +325,85 @@ export class MCPAdapter implements BaseAdapter {
 
     return { categories, relationships };
   }
+
+  // -----------------------------------------------------------------------
+  // Query fallback: generate database-specific queries for neighbors/expand
+  // -----------------------------------------------------------------------
+
+  /**
+   * Check if we should fall back to using the query tool for an operation.
+   * This happens when the tool mapping for the operation is the same as
+   * the query tool (meaning no dedicated tool was found).
+   */
+  private shouldUseQueryFallback(operation: "neighbors" | "expand"): boolean {
+    const mapped = this.toolMapping[operation];
+    // If the tool is the same as the query tool, there's no dedicated tool
+    return mapped === this.toolMapping.query;
+  }
+
+  /**
+   * Generate a query to find neighbors of a node.
+   * Uses Cypher for Neo4j, GQL for Spanner, generic Cypher otherwise.
+   */
+  private generateNeighborsQuery(nodeId: string, opts: NeighborsOptions): string {
+    const limit = opts.limit ?? 50;
+    const safeId = escapeQueryParam(nodeId);
+
+    switch (this.databaseType) {
+      case "neo4j":
+      case "memgraph": {
+        // Cypher query
+        const edgeFilter = opts.edgeTypes?.length
+          ? `:${opts.edgeTypes.join("|")}`
+          : "";
+        return `MATCH (n)-[r${edgeFilter}]-(m) WHERE n.id = '${safeId}' OR id(n) = ${isNumeric(nodeId) ? nodeId : `'${safeId}'`} RETURN n, r, m LIMIT ${limit}`;
+      }
+      case "spanner": {
+        // GQL (Spanner Graph)
+        return `MATCH (n)-[r]-(m) WHERE n.id = '${safeId}' RETURN n, r, m LIMIT ${limit}`;
+      }
+      default: {
+        // Generic Cypher-like
+        return `MATCH (n)-[r]-(m) WHERE n.id = '${safeId}' RETURN n, r, m LIMIT ${limit}`;
+      }
+    }
+  }
+
+  /**
+   * Generate a query to expand from multiple nodes.
+   * Uses Cypher for Neo4j, GQL for Spanner.
+   */
+  private generateExpandQuery(nodeIds: string[], opts: ExpandOptions): string {
+    const limit = opts.limit ?? 100;
+    const depth = opts.depth ?? 1;
+    const safeIds = nodeIds.map(escapeQueryParam);
+
+    switch (this.databaseType) {
+      case "neo4j":
+      case "memgraph": {
+        const idList = safeIds.map((id) => `'${id}'`).join(", ");
+        return `MATCH (n)-[r*1..${depth}]-(m) WHERE n.id IN [${idList}] RETURN n, r, m LIMIT ${limit}`;
+      }
+      case "spanner": {
+        const idList = safeIds.map((id) => `'${id}'`).join(", ");
+        return `MATCH (n)-[r]->{1,${depth}}(m) WHERE n.id IN [${idList}] RETURN n, r, m LIMIT ${limit}`;
+      }
+      default: {
+        const idList = safeIds.map((id) => `'${id}'`).join(", ");
+        return `MATCH (n)-[r*1..${depth}]-(m) WHERE n.id IN [${idList}] RETURN n, r, m LIMIT ${limit}`;
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function escapeQueryParam(value: string): string {
+  return value.replace(/'/g, "\\'").replace(/\\/g, "\\\\");
+}
+
+function isNumeric(value: string): boolean {
+  return /^\d+$/.test(value);
 }
