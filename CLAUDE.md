@@ -2,7 +2,9 @@
 
 ## Project Overview
 
-GraphXR Local Gateway is a localhost-only HTTP service that bridges GraphXR Web (browser) to local/enterprise graph databases via MCP (Model Context Protocol). It binds to `127.0.0.1:19285` and provides a secure pairing-based auth flow.
+GraphXR Local Gateway is a localhost-only HTTP service that bridges GraphXR Web (browser) to multiple graph data sources via MCP (Model Context Protocol). It binds to `127.0.0.1:19285` and provides a secure pairing-based auth flow.
+
+The gateway connects to graph databases (Neo4j, Spanner Graph, etc.) through their MCP servers, providing a unified GraphXR-compatible API regardless of the underlying database.
 
 ## Tech Stack
 
@@ -10,7 +12,7 @@ GraphXR Local Gateway is a localhost-only HTTP service that bridges GraphXR Web 
 - **Frontend (Console)**: React 19 + Ant Design 5 + Vite 6, dark theme
 - **Build**: `tsup` (backend), `vite` (console)
 - **Test**: Vitest + Supertest
-- **MCP SDK**: `@modelcontextprotocol/sdk`
+- **MCP SDK**: `@modelcontextprotocol/sdk` (stdio + HTTP/SSE transports)
 
 ## Project Structure
 
@@ -21,102 +23,179 @@ src/                        # Backend source (Express)
   config/
     config-manager.ts       # Runtime config management + persistence
   middleware/                # cors, auth (bearer token), host-guard (DNS rebinding protection)
-  routes/                   # health, pair, graph, catalog, console
+  routes/
+    health.ts               # GET /health
+    pair.ts                 # Pairing flow (start, status, approve, deny)
+    graph.ts                # Graph operations (schema, neighbors, expand, query)
+    catalog.ts              # Provider/dataset discovery
+    proxy.ts                # graphxr-database-proxy compatible API
+    console.ts              # Gateway management API
   pairing/                  # PairingManager — session & token lifecycle
-  mcp/                      # MCP client integration
-    provider-registry.ts    # Provider registry interface
-    mcp-manager.ts          # Manages MCP server connections (add/remove/restart at runtime)
-    adapters/               # base-adapter, mcp-adapter, mock-adapter
-  types/                    # config, graph-delta, api types
+  mcp/
+    mcp-manager.ts          # MCP connection lifecycle (stdio + HTTP/SSE), tool auto-discovery
+    provider-registry.ts    # Provider registry (adapters + status + databaseType)
+    provider-templates.ts   # Pre-configured templates for Neo4j, Spanner, etc.
+    adapters/
+      base-adapter.ts       # Interface: getSchema, getGraphSchema, getNeighbors, expand, query
+      mcp-adapter.ts        # Generic MCP tool caller → GraphDelta converter (db-type-aware)
+      mock-adapter.ts       # Hardcoded demo data
+  types/
+    graph-delta.ts          # GNode (id, labels[], properties), GEdge (startNodeId/endNodeId), GraphSchema, QueryResponse
+    config.ts               # ProviderConfig (with databaseType, toolMapping), GatewayConfig
+    api.ts                  # API request/response types + ProxyQueryRequest
   utils/                    # logger, open-browser
 console/                    # React frontend (Vite project)
   src/
-    App.tsx                 # Layout + client-side routing (menu-based, no react-router)
-    api.ts                  # API client (fetch wrappers)
+    App.tsx                 # Layout + client-side routing
+    api.ts                  # API client with full type definitions
     pages/                  # Dashboard, Providers, Sessions, GraphExplorer, Settings
-    components/             # StatusBadge, ProviderModal
-public/                     # Static assets served by Express
-  console/                  # Vite build output (gitignored)
-  pair-confirm.html         # Pairing confirmation page
-tests/                      # Vitest test files
-gateway.config.json         # Runtime config (providers, origins, etc.)
+    components/             # StatusBadge, ProviderModal (with template quick-setup)
+tests/                      # Vitest test files (50+ tests)
+gateway.config.json         # Runtime config
 ```
 
 ## Common Commands
 
 ```bash
-# Development (both frontend + backend concurrently)
-npm run dev
-
-# Backend only (with tsx watch)
-npm run dev:server
-
-# Console frontend dev server (with HMR, proxies to backend)
-npm run dev:web
-
-# Build console to public/console/
-npm run build:web
-
-# Build backend to dist/
-npm run build:server
-
-# Run tests
-npm test
-
-# Start production
-npm start
+npm run dev          # Dev: frontend + backend concurrently
+npm run dev:server   # Backend only (tsx watch)
+npm run dev:web      # Console frontend (HMR, proxies to backend)
+npm run build:web    # Build console to public/console/
+npm run build:server # Build backend to dist/
+npm test             # Run all tests
+npm start            # Production
 ```
 
-## Key Architecture Decisions
+## Data Model (graphxr-database-proxy compatible)
 
-- **Localhost only**: Server binds to `127.0.0.1`, never `0.0.0.0`
-- **Host guard middleware**: Rejects requests with unexpected `Host` headers (DNS rebinding protection)
-- **Pairing auth**: Browser initiates pairing → user confirms locally → short-lived bearer token issued
-- **Console is public**: `/console/*` and `/api/console/*` skip bearer auth (protected by host guard — local access only)
-- **GraphDelta**: Unified response shape for all graph operations (`nodes[]`, `edges[]`, `pageInfo`, `summary`, `provenance`)
-- **MCP adapters**: Each provider gets an adapter (real MCP or mock); the registry provides a unified interface
-- **Dynamic CORS**: Origin allowlist is read from ConfigManager on each request, supports `["*"]` for allow-all
-- **Runtime config**: Settings and providers can be managed at runtime via Console API, persisted to `gateway.config.json`
+```typescript
+// Node: id + labels array + properties object
+interface GNode {
+  id: string;
+  labels: string[];
+  properties: Record<string, unknown>;
+}
 
-## Console API Endpoints
+// Edge: startNodeId/endNodeId (not src/dst)
+interface GEdge {
+  id: string;
+  type: string;
+  startNodeId: string;
+  endNodeId: string;
+  properties: Record<string, unknown>;
+}
 
-### Stats & Monitoring
-- `GET /api/console/stats` — Dashboard stats (uptime, counts)
-- `POST /api/console/self-test` — Run end-to-end health checks
+// Schema: categories + relationships with property type definitions
+interface GraphSchema {
+  categories: CategorySchema[];    // { name, props[], propsTypes, keys[], ... }
+  relationships: RelationshipSchema[];  // { name, startCategory, endCategory, ... }
+}
+```
 
-### Sessions & Tokens
-- `GET /api/console/sessions` — Pairing session history
-- `GET /api/console/tokens` — Active tokens (prefix only)
-- `DELETE /api/console/tokens/:prefix` — Revoke a token
+## API Endpoints
 
-### Provider Management (CRUD)
-- `GET /api/console/providers` — Provider list with status
-- `POST /api/console/providers` — Add new provider (connects MCP + persists)
-- `PUT /api/console/providers/:name` — Update provider (reconnects)
+### Proxy-Compatible API (matches graphxr-database-proxy)
+Requires bearer auth. Dataset auto-resolved when provider has exactly one.
+- `GET /api/providers` — List all providers with API URLs
+- `GET /api/providers/:provider` — Provider info + endpoint URLs
+- `POST /api/providers/:provider/query` — Execute query `{query, parameters}`
+- `GET /api/providers/:provider/graphSchema` — Graph schema (categories + relationships)
+- `GET /api/providers/:provider/schema` — Raw schema as GraphDelta
+
+### Gateway Graph API (internal)
+- `POST /graph/schema` — Get schema via provider/dataset
+- `POST /graph/neighbors` — Fetch neighbors of a node
+- `POST /graph/expand` — Expand multiple nodes
+- `POST /graph/query` — Execute raw query
+
+### Console API (local-only, no auth)
+- `GET /api/console/stats` — Dashboard stats
+- `GET /api/console/templates` — Available provider templates
+- `GET /api/console/templates/:id` — Template detail
+- `GET /api/console/providers` — Provider list (with MCP tools)
+- `POST /api/console/providers` — Add provider
+- `PUT /api/console/providers/:name` — Update provider
 - `DELETE /api/console/providers/:name` — Remove provider
-- `POST /api/console/providers/:name/restart` — Restart provider connection
+- `POST /api/console/providers/:name/restart` — Restart
+- `GET /api/console/providers/:name/tools` — MCP tool introspection
+- `GET/PUT /api/console/settings` — Gateway settings
+- `GET /api/console/sessions` — Pairing sessions
+- `GET /api/console/tokens` — Active tokens
+- `POST /api/console/self-test` — Health checks
 
-### Settings
-- `GET /api/console/settings` — Current gateway config
-- `PUT /api/console/settings` — Update allowedOrigins, tokenTTL, pairingTimeout
+## MCP Provider Configuration
+
+### Supported Transports
+- **stdio**: Local process (command + args). Used for Neo4j official MCP, uvx-based servers.
+- **http**: Remote HTTP/SSE (endpoint URL). Used for Spanner MCP Toolbox, managed MCP services.
+
+### Provider Templates
+Pre-configured templates for quick setup:
+- `neo4j-official` — Neo4j Official MCP Server (tools: get-schema, read-cypher)
+- `neo4j-labs` — Neo4j Labs mcp-neo4j-cypher (tools: get_schema, run_read_query)
+- `spanner-toolbox` — Google Cloud Spanner MCP Toolbox (tools: spanner-list-graphs, spanner-sql)
+- `spanner-managed` — Google Cloud managed MCP endpoint
+- `generic` / `generic-http` — Any MCP server (auto-detected tools)
+
+### Tool Auto-Discovery
+When connecting to an MCP server, the gateway:
+1. Lists all available tools via `client.listTools()`
+2. Auto-maps tools to operations (schema, query, neighbors, expand) based on naming patterns
+3. Supports explicit `toolMapping` override in provider config
+
+### Config Example (gateway.config.json)
+```json
+{
+  "port": 19285,
+  "allowedOrigins": ["*"],
+  "tokenTTL": 28800,
+  "pairingTimeout": 300,
+  "providers": [
+    {
+      "name": "my-neo4j",
+      "transport": "stdio",
+      "databaseType": "neo4j",
+      "command": "neo4j-mcp-server",
+      "args": [],
+      "env": {
+        "NEO4J_URI": "bolt://localhost:7687",
+        "NEO4J_USERNAME": "neo4j",
+        "NEO4J_PASSWORD": "password"
+      },
+      "datasets": ["movies"]
+    },
+    {
+      "name": "my-spanner",
+      "transport": "http",
+      "databaseType": "spanner",
+      "endpoint": "http://localhost:5000/mcp",
+      "datasets": ["my-graph"],
+      "env": {
+        "GOOGLE_APPLICATION_CREDENTIALS": "/path/to/sa.json"
+      }
+    }
+  ]
+}
+```
 
 ## Testing
 
-Tests live in `tests/` and use Vitest. Run with `npm test`. Current coverage:
-- `tests/middleware/cors.test.ts` — CORS middleware (including wildcard `*`)
+Tests in `tests/`, run with `npm test`. Coverage:
+- `tests/middleware/cors.test.ts` — CORS middleware
 - `tests/pairing/pairing-manager.test.ts` — Pairing lifecycle
-- `tests/routes/health.test.ts` — Health endpoint + CORS integration
-- `tests/routes/console-settings.test.ts` — Settings CRUD + persistence
-- `tests/routes/console-providers.test.ts` — Provider CRUD validation
+- `tests/routes/health.test.ts` — Health + CORS integration
+- `tests/routes/proxy.test.ts` — Proxy-compatible API (query, schema, graphSchema)
+- `tests/routes/console-settings.test.ts` — Settings CRUD
+- `tests/routes/console-providers.test.ts` — Provider CRUD
+- `tests/routes/console-templates.test.ts` — Templates + tools API
 - `tests/routes/console-self-test.test.ts` — Self-test endpoint
 
-## Config
+## Key Architecture Decisions
 
-`gateway.config.json` at project root. Key fields:
-- `port` — Listen port (default 19285)
-- `allowedOrigins` — CORS origin allowlist (default `["*"]` — allow all)
-- `tokenTTL` — Bearer token lifetime in seconds (default 28800 = 8h)
-- `pairingTimeout` — Pairing request timeout in seconds (default 300 = 5m)
-- `providers[]` — MCP server definitions (name, transport, command, args, env, datasets)
-
-All settings except `port` can be changed at runtime via the Console Settings page.
+- **MCP-first**: All database connections go through MCP protocol, not direct drivers
+- **Localhost only**: Server binds to `127.0.0.1`, never `0.0.0.0`
+- **GraphXR compatible**: Data format matches graphxr-database-proxy (labels[], startNodeId/endNodeId)
+- **Database-type aware**: Adapters normalize different MCP server outputs per database type
+- **Dual transport**: stdio for local MCP servers, HTTP/SSE for remote/managed ones
+- **Template-driven**: Pre-configured templates make adding Neo4j/Spanner providers easy
+- **Dynamic config**: Providers can be managed at runtime via Console, persisted to disk
