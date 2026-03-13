@@ -48,9 +48,9 @@ console/                    # React frontend (Vite project)
   src/
     App.tsx                 # Layout + client-side routing
     api.ts                  # API client with full type definitions
-    pages/                  # Dashboard, Providers, Sessions, GraphExplorer, Settings
+    pages/                  # Dashboard, Providers, SchemaExplorer, Sessions, GraphExplorer, Settings
     components/             # StatusBadge, ProviderModal (with template quick-setup)
-tests/                      # Vitest test files (50+ tests)
+tests/                      # Vitest test files (69 tests)
 gateway.config.json         # Runtime config
 ```
 
@@ -110,6 +110,7 @@ Requires bearer auth. Dataset auto-resolved when provider has exactly one.
 
 ### Console API (local-only, no auth)
 - `GET /api/console/stats` — Dashboard stats
+- `GET /api/console/events` — Connection events log
 - `GET /api/console/templates` — Available provider templates
 - `GET /api/console/templates/:id` — Template detail
 - `GET /api/console/providers` — Provider list (with MCP tools)
@@ -118,6 +119,8 @@ Requires bearer auth. Dataset auto-resolved when provider has exactly one.
 - `DELETE /api/console/providers/:name` — Remove provider
 - `POST /api/console/providers/:name/restart` — Restart
 - `GET /api/console/providers/:name/tools` — MCP tool introspection
+- `GET /api/console/providers/:name/schema` — Graph schema for console
+- `GET /api/console/providers/:name/events` — Provider connection events
 - `GET/PUT /api/console/settings` — Gateway settings
 - `GET /api/console/sessions` — Pairing sessions
 - `GET /api/console/tokens` — Active tokens
@@ -180,7 +183,7 @@ When connecting to an MCP server, the gateway:
 
 ## Testing
 
-Tests in `tests/`, run with `npm test`. Coverage:
+Tests in `tests/`, run with `npm test`. 69 tests across 10 files:
 - `tests/middleware/cors.test.ts` — CORS middleware
 - `tests/pairing/pairing-manager.test.ts` — Pairing lifecycle
 - `tests/routes/health.test.ts` — Health + CORS integration
@@ -189,6 +192,8 @@ Tests in `tests/`, run with `npm test`. Coverage:
 - `tests/routes/console-providers.test.ts` — Provider CRUD
 - `tests/routes/console-templates.test.ts` — Templates + tools API
 - `tests/routes/console-self-test.test.ts` — Self-test endpoint
+- `tests/routes/console-events.test.ts` — Connection events API
+- `tests/mcp/mcp-adapter.test.ts` — MCP adapter data normalization (14 tests)
 
 ## Key Architecture Decisions
 
@@ -199,3 +204,15 @@ Tests in `tests/`, run with `npm test`. Coverage:
 - **Dual transport**: stdio for local MCP servers, HTTP/SSE for remote/managed ones
 - **Template-driven**: Pre-configured templates make adding Neo4j/Spanner providers easy
 - **Dynamic config**: Providers can be managed at runtime via Console, persisted to disk
+- **Health monitoring**: Periodic health checks (30s) with auto-reconnect on failure (up to 5 attempts)
+- **Retry logic**: MCP tool calls retry up to 2 times on transient failures with exponential backoff
+- **Connection events**: Full event log for monitoring connection lifecycle (connect, disconnect, reconnect, health)
+
+## Console Pages
+
+- **Dashboard**: Stats, connection events timeline, self-test
+- **Providers**: CRUD table, detail drawer (tools, events, config), template quick-setup
+- **Schema Explorer**: Browse node categories and relationships with property types
+- **Sessions & Tokens**: Pairing history, active tokens with relative times, revoke with confirm
+- **Graph Explorer**: Query with structured table view (nodes/edges), toggle JSON view, db-aware placeholders
+- **Settings**: CORS, token TTL, pairing timeout with descriptions and validation
