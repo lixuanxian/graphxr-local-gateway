@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Table, Typography, Tag, Spin, Button, Space, Popconfirm } from "antd";
+import { Table, Typography, Tag, Spin, Button, Space, Popconfirm, Tooltip } from "antd";
 import { App as AntdApp } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import {
@@ -7,6 +7,7 @@ import {
   EditOutlined,
   DeleteOutlined,
   ReloadOutlined,
+  ApiOutlined,
 } from "@ant-design/icons";
 import StatusBadge from "../components/StatusBadge.tsx";
 import ProviderModal from "../components/ProviderModal.tsx";
@@ -19,6 +20,18 @@ import {
   type ProviderInfo,
   type ProviderConfig,
 } from "../api.ts";
+
+const DB_TYPE_COLORS: Record<string, string> = {
+  neo4j: "green",
+  spanner: "blue",
+  postgresql: "cyan",
+  mysql: "orange",
+  mongodb: "lime",
+  neptune: "purple",
+  tigergraph: "magenta",
+  memgraph: "volcano",
+  generic: "default",
+};
 
 export default function Providers() {
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
@@ -48,6 +61,7 @@ export default function Providers() {
     setEditData({
       name: record.name,
       transport: record.transport,
+      databaseType: record.databaseType,
       datasets: record.datasets,
     });
     setModalOpen(true);
@@ -100,6 +114,16 @@ export default function Providers() {
       render: (name: string) => <Typography.Text strong>{name}</Typography.Text>,
     },
     {
+      title: "Type",
+      dataIndex: "databaseType",
+      key: "databaseType",
+      render: (t: string) => (
+        <Tag color={DB_TYPE_COLORS[t] ?? "default"}>
+          {t.toUpperCase()}
+        </Tag>
+      ),
+    },
+    {
       title: "Transport",
       dataIndex: "transport",
       key: "transport",
@@ -115,6 +139,21 @@ export default function Providers() {
             {d}
           </Tag>
         )),
+    },
+    {
+      title: "MCP Tools",
+      dataIndex: "tools",
+      key: "tools",
+      render: (tools: string[] | undefined) => {
+        if (!tools || tools.length === 0) return <Typography.Text type="secondary">-</Typography.Text>;
+        return (
+          <Tooltip title={tools.join(", ")}>
+            <Tag icon={<ApiOutlined />} color="geekblue">
+              {tools.length} tools
+            </Tag>
+          </Tooltip>
+        );
+      },
     },
     {
       title: "Status",

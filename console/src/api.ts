@@ -23,21 +23,36 @@ export interface Stats {
 export const getStats = () => fetchJSON<Stats>("/api/console/stats");
 
 // --- Providers ---
+export type DatabaseType =
+  | "neo4j"
+  | "spanner"
+  | "postgresql"
+  | "mysql"
+  | "mongodb"
+  | "neptune"
+  | "tigergraph"
+  | "memgraph"
+  | "generic";
+
 export interface ProviderInfo {
   name: string;
   transport: string;
+  databaseType: DatabaseType;
   datasets: string[];
   status: "connected" | "disconnected" | "error";
+  tools?: string[];
 }
 
 export interface ProviderConfig {
   name: string;
   transport: string;
+  databaseType?: DatabaseType;
   command?: string;
   args?: string[];
   env?: Record<string, string>;
   endpoint?: string;
   datasets: string[];
+  toolMapping?: Record<string, string>;
 }
 
 export const getProviders = () =>
@@ -73,6 +88,41 @@ export const restartProvider = (name: string) =>
     `/api/console/providers/${encodeURIComponent(name)}/restart`,
     { method: "POST" }
   );
+
+// --- Provider Tools ---
+export interface ProviderTools {
+  provider: string;
+  tools: string[];
+  toolMapping: Record<string, string>;
+}
+
+export const getProviderTools = (name: string) =>
+  fetchJSON<ProviderTools>(
+    `/api/console/providers/${encodeURIComponent(name)}/tools`
+  );
+
+// --- Provider Templates ---
+export interface ProviderTemplate {
+  id: string;
+  label: string;
+  description: string;
+  databaseType: DatabaseType;
+  transport: "stdio" | "http";
+  toolMapping: Record<string, string>;
+  defaults: Partial<ProviderConfig>;
+  requiredFields: string[];
+  envHints: Record<string, string>;
+}
+
+export const getTemplates = () =>
+  fetchJSON<{ templates: ProviderTemplate[] }>("/api/console/templates").then(
+    (r) => r.templates
+  );
+
+export const getTemplate = (id: string) =>
+  fetchJSON<{ template: ProviderTemplate }>(
+    `/api/console/templates/${encodeURIComponent(id)}`
+  ).then((r) => r.template);
 
 // --- Sessions ---
 export interface Session {
@@ -140,7 +190,7 @@ export const runSelfTest = () =>
 export interface HealthResponse {
   status: string;
   version: string;
-  providers: Array<{ name: string; status: string }>;
+  providers: Array<{ name: string; status: string; databaseType: string }>;
 }
 
 export const getHealth = () => fetchJSON<HealthResponse>("/health");
