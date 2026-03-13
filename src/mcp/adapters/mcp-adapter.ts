@@ -450,7 +450,8 @@ function sleep(ms: number): Promise<void> {
 }
 
 function escapeQueryParam(value: string): string {
-  return value.replace(/'/g, "\\'").replace(/\\/g, "\\\\");
+  // Escape backslashes first, then single quotes
+  return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
 
 function isNumeric(value: string): boolean {
