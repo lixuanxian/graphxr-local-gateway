@@ -8,11 +8,18 @@ import { MCPAdapter } from "./adapters/mcp-adapter.js";
 import { MockAdapter } from "./adapters/mock-adapter.js";
 import { logger } from "../utils/logger.js";
 
+export interface MCPToolDetail {
+  name: string;
+  description?: string;
+  inputSchema?: Record<string, unknown>;
+}
+
 interface ManagedProvider {
   config: ProviderConfig;
   client?: Client;
   transport?: Transport;
   availableTools?: string[];
+  toolDetails?: MCPToolDetail[];
   lastHealthCheck?: number;
   consecutiveFailures: number;
   connectedAt?: number;
@@ -129,6 +136,13 @@ export class MCPManager {
     return this.managed.get(name)?.availableTools;
   }
 
+  /**
+   * Get full MCP tool details (name, description, input schema) for a provider.
+   */
+  getProviderToolDetails(name: string): MCPToolDetail[] | undefined {
+    return this.managed.get(name)?.toolDetails;
+  }
+
   // -----------------------------------------------------------------------
   // Transport connection
   // -----------------------------------------------------------------------
@@ -196,9 +210,14 @@ export class MCPManager {
 
     await client.connect(transport);
 
-    // Discover available tools
+    // Discover available tools (with full schemas)
     const toolsResult = await client.listTools();
     const toolNames = toolsResult.tools.map((t) => t.name);
+    const toolDetails: MCPToolDetail[] = toolsResult.tools.map((t) => ({
+      name: t.name,
+      description: t.description,
+      inputSchema: t.inputSchema as Record<string, unknown> | undefined,
+    }));
     logger.info(
       `Provider "${config.name}" connected via ${config.transport} — ${toolNames.length} tools: [${toolNames.join(", ")}]`
     );
@@ -218,6 +237,7 @@ export class MCPManager {
       client,
       transport,
       availableTools: toolNames,
+      toolDetails,
       lastHealthCheck: Date.now(),
       consecutiveFailures: 0,
       connectedAt: Date.now(),

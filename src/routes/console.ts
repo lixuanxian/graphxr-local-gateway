@@ -247,9 +247,11 @@ export function consoleRouter(
       return;
     }
     const config = mcpManager.getProviderConfig(name);
+    const toolDetails = mcpManager.getProviderToolDetails(name) ?? [];
     res.json({
       provider: name,
       tools,
+      toolDetails,
       toolMapping: config?.toolMapping ?? {},
     });
   });

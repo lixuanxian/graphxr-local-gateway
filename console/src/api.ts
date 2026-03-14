@@ -90,9 +90,16 @@ export const restartProvider = (name: string) =>
   );
 
 // --- Provider Tools ---
+export interface MCPToolDetail {
+  name: string;
+  description?: string;
+  inputSchema?: Record<string, unknown>;
+}
+
 export interface ProviderTools {
   provider: string;
   tools: string[];
+  toolDetails: MCPToolDetail[];
   toolMapping: Record<string, string>;
 }
 
