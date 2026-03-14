@@ -245,12 +245,13 @@ Tests in `tests/`, run with `npm test`. **101 tests across 13 files**:
 - **Connection events**: Full event log for monitoring connection lifecycle
 - **Query fallback**: Generates Cypher/GQL queries when MCP servers lack dedicated neighbor/expand tools
 
-## Console Pages (5 pages)
+## Console Pages (6 pages)
 
 - **Dashboard**: Stats, SSE real-time events, provider health cards, self-test
 - **Providers**: CRUD table, detail drawer (tools with schemas, events, config), template quick-setup
 - **Sessions & Tokens**: Manual token creation, revoke single/all, pairing history
 - **Graph Explorer**: Query editor with schema sidebar (clickable categories/relationships), query parameters, database-aware examples, history (localStorage), JSON export/copy, Ctrl+Enter
+- **Integration**: API endpoints reference, code examples (JS/cURL/Python/GraphXR), AI integration guides (Claude tool use, MCP client SDK, OpenAI function calling), response data format docs
 - **Settings**: Auth toggle (default off), CORS origins, token TTL, pairing timeout
 
 ## Development Guidelines

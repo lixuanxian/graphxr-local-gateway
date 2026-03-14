@@ -103,7 +103,7 @@ function getExampleQueries(dbType?: string, schema?: GraphSchema | null): { labe
   const relationships = schema?.relationships ?? [];
   const cat1 = categories[0] ?? "Node";
   const cat2 = categories[1] ?? categories[0] ?? "Node";
-  const rel1 = relationships[0]?.name ?? "RELATES_TO";
+  const rel1 = relationships[0]?.type ?? "RELATES_TO";
 
   switch (dbType) {
     case "neo4j":
