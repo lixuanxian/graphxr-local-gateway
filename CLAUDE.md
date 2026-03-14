@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-GraphXR Local Gateway is a localhost-only HTTP service that bridges GraphXR Web (browser) to multiple graph data sources via MCP (Model Context Protocol). It binds to `127.0.0.1:19285` and provides a secure pairing-based auth flow.
+GraphXR Local Gateway is a localhost-only HTTP service that bridges GraphXR Web (browser) to multiple graph data sources via MCP (Model Context Protocol). It binds to `127.0.0.1:19285` with optional pairing-based auth (disabled by default for easy development).
 
 The gateway connects to graph databases (Neo4j, Spanner Graph, etc.) through their MCP servers, providing a unified GraphXR-compatible API regardless of the underlying database.
 
@@ -26,7 +26,7 @@ src/                        # Backend source (Express)
     config-manager.ts       # Runtime config management + persistence
   middleware/
     cors.ts                 # CORS with dynamic origins
-    auth.ts                 # Bearer token auth (skips public/console paths)
+    auth.ts                 # Bearer token auth (optional, disabled by default)
     host-guard.ts           # DNS rebinding protection
     rate-limit.ts           # Per-IP rate limiting with configurable window/max
   routes/
@@ -57,16 +57,20 @@ console/                    # React frontend (Vite project)
     App.tsx                 # Layout + client-side routing
     api.ts                  # API client with full type definitions (MCPToolDetail, GraphSchema, etc.)
     pages/
-      Dashboard.tsx         # Stats, connection events timeline, self-test
+      Dashboard.tsx         # Stats, SSE real-time events, provider health, self-test
       Providers.tsx         # CRUD table, template quick-setup, tools/events/config detail
-      SchemaExplorer.tsx    # Browse categories and relationships with property types
-      Sessions.tsx          # Pairing history + active tokens with revoke
-      GraphExplorer.tsx     # Query editor with schema sidebar, example queries, history, export
-      Settings.tsx          # CORS, token TTL, pairing timeout, rate limit config
+      Sessions.tsx          # Token management (create, revoke, revoke all) + pairing history
+      GraphExplorer.tsx     # Query editor with schema sidebar, params, examples, history, export
+      Settings.tsx          # Auth toggle, CORS, token TTL, pairing timeout config
     components/
       StatusBadge.tsx       # Color-coded status indicator
       ProviderModal.tsx     # Add/edit provider with template quick-setup
+    utils/
+      event-config.tsx      # Shared EVENT_CONFIG for connection event display
 tests/                      # Vitest test files (101 tests across 13 files)
+examples/                   # Integration examples
+  quick-start.ts            # CLI example: health, providers, schema, query
+  quick-start.html          # Browser example with dark UI
 .claude/
   launch.json               # Dev server configurations for Claude Code
 gateway.config.json         # Runtime config (persisted by ConfigManager)
@@ -144,7 +148,9 @@ Requires bearer auth. Dataset auto-resolved when provider has exactly one.
 - `GET/PUT /api/console/settings` — Gateway settings CRUD
 - `GET /api/console/sessions` — Pairing sessions
 - `GET /api/console/tokens` — Active tokens
-- `DELETE /api/console/tokens/:tokenPrefix` — Revoke token
+- `POST /api/console/tokens` — Create token manually (with optional origin)
+- `DELETE /api/console/tokens` — Revoke all tokens
+- `DELETE /api/console/tokens/:tokenPrefix` — Revoke single token
 - `POST /api/console/providers/:name/test` — Per-provider connection test (schema, query, tools)
 - `GET /api/console/events/stream` — SSE stream for real-time connection events
 - `POST /api/console/self-test` — Health checks (connectivity, CORS, graph query)
@@ -174,6 +180,7 @@ When connecting to an MCP server, the gateway:
 ```json
 {
   "port": 19285,
+  "authEnabled": false,
   "allowedOrigins": ["*"],
   "tokenTTL": 28800,
   "pairingTimeout": 300,
@@ -226,6 +233,7 @@ Tests in `tests/`, run with `npm test`. **101 tests across 13 files**:
 
 - **MCP-first**: All database connections go through MCP protocol, not direct drivers
 - **Localhost only**: Server binds to `127.0.0.1`, never `0.0.0.0`
+- **Auth optional**: Bearer token auth disabled by default for easy development; enable in Settings
 - **GraphXR compatible**: Data format matches graphxr-database-proxy (labels[], startNodeId/endNodeId)
 - **Database-type aware**: Adapters normalize different MCP server outputs per database type
 - **Dual transport**: stdio for local MCP servers, HTTP/SSE for remote/managed ones
@@ -237,14 +245,13 @@ Tests in `tests/`, run with `npm test`. **101 tests across 13 files**:
 - **Connection events**: Full event log for monitoring connection lifecycle
 - **Query fallback**: Generates Cypher/GQL queries when MCP servers lack dedicated neighbor/expand tools
 
-## Console Pages
+## Console Pages (5 pages)
 
-- **Dashboard**: Stats, connection events timeline, self-test
+- **Dashboard**: Stats, SSE real-time events, provider health cards, self-test
 - **Providers**: CRUD table, detail drawer (tools with schemas, events, config), template quick-setup
-- **Schema Explorer**: Browse node categories and relationships with property types
-- **Sessions & Tokens**: Pairing history, active tokens with relative times, revoke with confirm
-- **Graph Explorer**: Query editor with schema sidebar (clickable categories/relationships generate queries), database-aware example queries, query history (localStorage, last 20), JSON export/copy, Ctrl+Enter execution, query parameter support
-- **Settings**: CORS origins, token TTL, pairing timeout with descriptions and validation
+- **Sessions & Tokens**: Manual token creation, revoke single/all, pairing history
+- **Graph Explorer**: Query editor with schema sidebar (clickable categories/relationships), query parameters, database-aware examples, history (localStorage), JSON export/copy, Ctrl+Enter
+- **Settings**: Auth toggle (default off), CORS origins, token TTL, pairing timeout
 
 ## Development Guidelines
 
