@@ -290,6 +290,39 @@ export function consoleRouter(
     res.json({ provider: name, events });
   });
 
+  // ─── SSE: Real-time events stream ──────────────────────
+
+  router.get("/api/console/events/stream", (req, res) => {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+
+    // Send initial state
+    const providers = providerRegistry.listProviders();
+    res.write(`event: providers\ndata: ${JSON.stringify(providers)}\n\n`);
+
+    // Poll for new events every 2 seconds
+    let lastEventCount = mcpManager.getConnectionEvents(1000).length;
+    const interval = setInterval(() => {
+      const allEvents = mcpManager.getConnectionEvents(1000);
+      if (allEvents.length > lastEventCount) {
+        const newEvents = allEvents.slice(lastEventCount);
+        for (const evt of newEvents) {
+          res.write(`event: connection\ndata: ${JSON.stringify(evt)}\n\n`);
+        }
+        // Also send updated provider list
+        const updatedProviders = providerRegistry.listProviders();
+        res.write(`event: providers\ndata: ${JSON.stringify(updatedProviders)}\n\n`);
+        lastEventCount = allEvents.length;
+      }
+    }, 2000);
+
+    req.on("close", () => {
+      clearInterval(interval);
+    });
+  });
+
   // ─── Provider Test Query (console-accessible) ───────────
 
   router.post("/api/console/providers/:name/test-query", async (req, res) => {

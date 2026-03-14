@@ -300,6 +300,95 @@ describe("MCPAdapter", () => {
     });
   });
 
+  describe("Nested data extraction", () => {
+    it("extracts nodes from data.nodes shape", async () => {
+      const client = createMockClient({
+        data: {
+          nodes: [{ id: "d1", labels: ["Item"], properties: { name: "test" } }],
+          edges: [],
+        },
+      });
+
+      const adapter = new MCPAdapter("test", client, "generic", {
+        query: "run_query",
+        schema: "get_schema",
+        neighbors: "run_query",
+        expand: "run_query",
+      });
+
+      const result = await adapter.query("db", "query", {});
+      expect(result.nodes).toHaveLength(1);
+      expect(result.nodes[0].id).toBe("d1");
+    });
+
+    it("extracts edges from relationships field", async () => {
+      const client = createMockClient({
+        nodes: [],
+        relationships: [
+          { id: "r1", type: "CONNECTS", startNodeId: "a", endNodeId: "b", properties: {} },
+        ],
+      });
+
+      const adapter = new MCPAdapter("test", client, "neo4j", {
+        query: "run_query",
+        schema: "get_schema",
+        neighbors: "run_query",
+        expand: "run_query",
+      });
+
+      const result = await adapter.query("db", "query", {});
+      expect(result.edges).toHaveLength(1);
+      expect(result.edges[0].type).toBe("CONNECTS");
+    });
+  });
+
+  describe("Query fallback", () => {
+    it("uses query tool for neighbors when no dedicated tool exists", async () => {
+      const client = createMockClient({ nodes: [], edges: [] });
+
+      // Both neighbors and query map to the same tool = fallback
+      const adapter = new MCPAdapter("test", client, "neo4j", {
+        query: "read-cypher",
+        schema: "get-schema",
+        neighbors: "read-cypher",
+        expand: "read-cypher",
+      });
+
+      await adapter.getNeighbors("db", "node-1", { limit: 10 });
+
+      // Should have called with a generated Cypher query containing the nodeId
+      expect(client.callTool).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "read-cypher",
+          arguments: expect.objectContaining({
+            query: expect.stringContaining("node-1"),
+          }),
+        })
+      );
+    });
+
+    it("generates Cypher for Neo4j expand fallback", async () => {
+      const client = createMockClient({ nodes: [], edges: [] });
+
+      const adapter = new MCPAdapter("test", client, "neo4j", {
+        query: "read-cypher",
+        schema: "get-schema",
+        neighbors: "read-cypher",
+        expand: "read-cypher",
+      });
+
+      await adapter.expand("db", ["id1", "id2"], { depth: 2, limit: 50 });
+
+      expect(client.callTool).toHaveBeenCalledWith(
+        expect.objectContaining({
+          arguments: expect.objectContaining({
+            query: expect.stringMatching(/IN \[.*'id1'.*'id2'/),
+          }),
+        })
+      );
+    });
+  });
+
   describe("Error handling", () => {
     it("throws on MCP-level error response", async () => {
       const client = {
