@@ -5,6 +5,7 @@ import type { ConfigManager } from "./config/config-manager.js";
 import { corsMiddleware } from "./middleware/cors.js";
 import { hostGuardMiddleware } from "./middleware/host-guard.js";
 import { authMiddleware } from "./middleware/auth.js";
+import { rateLimitMiddleware } from "./middleware/rate-limit.js";
 import { healthRouter } from "./routes/health.js";
 import { pairRouter } from "./routes/pair.js";
 import { graphRouter } from "./routes/graph.js";
@@ -31,6 +32,7 @@ export function createApp(
   app.use(hostGuardMiddleware(config.port));
   app.use(corsMiddleware(() => configManager.get().allowedOrigins));
   app.use(authMiddleware(pairingManager));
+  app.use(rateLimitMiddleware(() => configManager.get().rateLimit));
 
   // --- Static: pair confirm page ---
   const publicDir = path.resolve(__dirname, "..", "public");
