@@ -41,6 +41,11 @@ export interface ProviderInfo {
   datasets: string[];
   status: "connected" | "disconnected" | "error";
   tools?: string[];
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  endpoint?: string;
+  toolMapping?: Record<string, string>;
 }
 
 export interface ProviderConfig {

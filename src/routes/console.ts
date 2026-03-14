@@ -88,10 +88,18 @@ export function consoleRouter(
   // ─── Providers (read) ────────────────────────────────────
 
   router.get("/api/console/providers", (_req, res) => {
-    const providers = providerRegistry.listProviders().map((p) => ({
-      ...p,
-      tools: mcpManager.getProviderTools(p.name) ?? [],
-    }));
+    const providers = providerRegistry.listProviders().map((p) => {
+      const config = mcpManager.getProviderConfig(p.name);
+      return {
+        ...p,
+        tools: mcpManager.getProviderTools(p.name) ?? [],
+        command: config?.command,
+        args: config?.args,
+        env: config?.env,
+        endpoint: config?.endpoint,
+        toolMapping: config?.toolMapping,
+      };
+    });
     res.json({ providers });
   });
 

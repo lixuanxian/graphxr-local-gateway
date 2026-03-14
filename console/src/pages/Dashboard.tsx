@@ -7,29 +7,19 @@ import {
   KeyOutlined,
   ExperimentOutlined,
   LinkOutlined,
-  DisconnectOutlined,
-  WarningOutlined,
-  SyncOutlined,
 } from "@ant-design/icons";
 import {
   getStats,
   getProviders,
   runSelfTest,
   getConnectionEvents,
+  subscribeToEvents,
   type Stats,
   type ProviderInfo,
   type SelfTestResult,
   type ConnectionEvent,
 } from "../api.ts";
-
-const EVENT_CONFIG: Record<string, { color: string; icon: React.ReactNode }> = {
-  connected: { color: "green", icon: <LinkOutlined /> },
-  disconnected: { color: "red", icon: <DisconnectOutlined /> },
-  error: { color: "red", icon: <WarningOutlined /> },
-  reconnecting: { color: "orange", icon: <SyncOutlined spin /> },
-  health_ok: { color: "green", icon: <CheckCircleOutlined /> },
-  health_fail: { color: "orange", icon: <WarningOutlined /> },
-};
+import { EVENT_CONFIG } from "../utils/event-config.tsx";
 
 export default function Dashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
@@ -53,9 +43,29 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    load();
-    const t = setInterval(load, 5000);
-    return () => clearInterval(t);
+    load(); // Initial load of stats, events, providers
+
+    // SSE for real-time events and provider status
+    const unsub = subscribeToEvents(
+      (event) => {
+        setEvents((prev) => [...prev.slice(-14), event]); // Keep last 15
+      },
+      (updatedProviders) => {
+        setProviders(updatedProviders);
+      }
+    );
+
+    // Low-frequency poll for stats only (uptime, session count, etc.)
+    const statsInterval = setInterval(() => {
+      getStats()
+        .then((s) => { setStats(s); setError(null); })
+        .catch((e) => setError(e.message));
+    }, 30000);
+
+    return () => {
+      unsub();
+      clearInterval(statsInterval);
+    };
   }, []);
 
   const handleSelfTest = async () => {

@@ -24,9 +24,6 @@ import {
   ApiOutlined,
   InfoCircleOutlined,
   LinkOutlined,
-  DisconnectOutlined,
-  WarningOutlined,
-  SyncOutlined,
   CheckCircleOutlined,
 } from "@ant-design/icons";
 import StatusBadge from "../components/StatusBadge.tsx";
@@ -46,6 +43,7 @@ import {
   type ProviderTestResult,
   type ConnectionEvent,
 } from "../api.ts";
+import { EVENT_CONFIG } from "../utils/event-config.tsx";
 
 const DB_TYPE_COLORS: Record<string, string> = {
   neo4j: "green",
@@ -57,15 +55,6 @@ const DB_TYPE_COLORS: Record<string, string> = {
   tigergraph: "magenta",
   memgraph: "volcano",
   generic: "default",
-};
-
-const EVENT_CONFIG: Record<string, { color: string; icon: React.ReactNode }> = {
-  connected: { color: "green", icon: <LinkOutlined /> },
-  disconnected: { color: "red", icon: <DisconnectOutlined /> },
-  error: { color: "red", icon: <WarningOutlined /> },
-  reconnecting: { color: "orange", icon: <SyncOutlined spin /> },
-  health_ok: { color: "green", icon: <CheckCircleOutlined /> },
-  health_fail: { color: "orange", icon: <WarningOutlined /> },
 };
 
 export default function Providers() {
@@ -133,6 +122,11 @@ export default function Providers() {
       transport: record.transport,
       databaseType: record.databaseType,
       datasets: record.datasets,
+      command: record.command,
+      args: record.args,
+      env: record.env,
+      endpoint: record.endpoint,
+      toolMapping: record.toolMapping,
     });
     setModalOpen(true);
   };

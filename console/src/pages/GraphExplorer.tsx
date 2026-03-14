@@ -278,6 +278,7 @@ export default function GraphExplorer() {
   const [viewMode, setViewMode] = useState<ViewMode>("table");
 
   const [history, setHistory] = useState<QueryHistoryEntry[]>(loadHistory);
+  const [params, setParams] = useState<Array<{ key: string; value: string }>>([]);
 
   const selectedProvider = providers.find((p) => p.name === provider);
 
@@ -322,7 +323,13 @@ export default function GraphExplorer() {
     setLoading(true);
     setError(null);
     try {
-      const res = await consoleTestQuery(provider, { dataset, query: queryToRun, limit });
+      const parameters: Record<string, unknown> = {};
+      for (const p of params) {
+        if (p.key) {
+          try { parameters[p.key] = JSON.parse(p.value); } catch { parameters[p.key] = p.value; }
+        }
+      }
+      const res = await consoleTestQuery(provider, { dataset, query: queryToRun, limit, parameters: Object.keys(parameters).length > 0 ? parameters : undefined });
       const data = res.data ?? res;
       setResult(data);
 
@@ -344,7 +351,7 @@ export default function GraphExplorer() {
     } finally {
       setLoading(false);
     }
-  }, [queryStr, provider, dataset, limit, history]);
+  }, [queryStr, provider, dataset, limit, history, params]);
 
   const handleExampleClick = (query: string) => {
     setQueryStr(query);
@@ -476,6 +483,7 @@ export default function GraphExplorer() {
           <Card
             size="small"
             title={<Space><HistoryOutlined /><span>History</span></Space>}
+            extra={<Button size="small" type="text" danger onClick={() => { setHistory([]); saveHistory([]); }}>Clear</Button>}
           >
             <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
               {history.slice(0, 10).map((h, i) => (
@@ -578,6 +586,7 @@ export default function GraphExplorer() {
               Ctrl+Enter to execute
             </Typography.Text>
             <Space>
+              <Button size="small" onClick={() => setParams([...params, { key: "", value: "" }])}>+ Param</Button>
               <Dropdown
                 menu={{
                   items: exampleQueries.map((eq, i) => ({
@@ -599,6 +608,18 @@ export default function GraphExplorer() {
               </Button>
             </Space>
           </div>
+          {params.length > 0 && (
+            <div style={{ marginTop: 8, padding: "8px 0", borderTop: "1px solid #2a2d3a" }}>
+              <Typography.Text type="secondary" style={{ fontSize: 11, marginBottom: 4, display: "block" }}>Parameters</Typography.Text>
+              {params.map((p, i) => (
+                <Space key={i} style={{ display: "flex", marginBottom: 4 }}>
+                  <Input size="small" placeholder="key" value={p.key} onChange={(e) => { const np = [...params]; np[i] = { ...np[i], key: e.target.value }; setParams(np); }} style={{ width: 120, fontFamily: "monospace" }} />
+                  <Input size="small" placeholder="value" value={p.value} onChange={(e) => { const np = [...params]; np[i] = { ...np[i], value: e.target.value }; setParams(np); }} style={{ width: 200, fontFamily: "monospace" }} />
+                  <Button size="small" type="text" danger onClick={() => setParams(params.filter((_, j) => j !== i))}>×</Button>
+                </Space>
+              ))}
+            </div>
+          )}
         </Card>
 
         {error && (

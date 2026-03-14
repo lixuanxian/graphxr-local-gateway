@@ -6,13 +6,11 @@ import {
   KeyOutlined,
   CodeOutlined,
   SettingOutlined,
-  PartitionOutlined,
 } from "@ant-design/icons";
 import Dashboard from "./pages/Dashboard.tsx";
 import Providers from "./pages/Providers.tsx";
 import Sessions from "./pages/Sessions.tsx";
 import GraphExplorer from "./pages/GraphExplorer.tsx";
-import SchemaExplorer from "./pages/SchemaExplorer.tsx";
 import Settings from "./pages/Settings.tsx";
 
 const { Sider, Content, Header } = Layout;
@@ -20,7 +18,6 @@ const { Sider, Content, Header } = Layout;
 const menuItems = [
   { key: "dashboard", icon: <DashboardOutlined />, label: "Dashboard" },
   { key: "providers", icon: <ApiOutlined />, label: "Providers" },
-  { key: "schema", icon: <PartitionOutlined />, label: "Schema Explorer" },
   { key: "sessions", icon: <KeyOutlined />, label: "Sessions & Tokens" },
   { key: "explorer", icon: <CodeOutlined />, label: "Graph Explorer" },
   { key: "settings", icon: <SettingOutlined />, label: "Settings" },
@@ -29,7 +26,6 @@ const menuItems = [
 const pages: Record<string, React.ReactNode> = {
   dashboard: <Dashboard />,
   providers: <Providers />,
-  schema: <SchemaExplorer />,
   sessions: <Sessions />,
   explorer: <GraphExplorer />,
   settings: <Settings />,
