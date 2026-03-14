@@ -16,6 +16,7 @@ import {
   Collapse,
   Empty,
   Dropdown,
+  Badge,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import {
@@ -29,6 +30,9 @@ import {
   ThunderboltOutlined,
   DatabaseOutlined,
   ExpandOutlined,
+  PlusOutlined,
+  DeleteOutlined,
+  MinusCircleOutlined,
 } from "@ant-design/icons";
 import {
   getProviders,
@@ -228,6 +232,9 @@ export default function GraphExplorer() {
 
   const [history, setHistory] = useState<QueryHistoryEntry[]>(loadHistory);
   const [params, setParams] = useState<Array<{ key: string; value: string }>>([]);
+  const [showParams, setShowParams] = useState(false);
+
+  const activeParamCount = params.filter((p) => p.key.trim()).length;
 
   const selectedProvider = providers.find((p) => p.name === provider);
 
@@ -608,7 +615,22 @@ export default function GraphExplorer() {
               Ctrl+Enter to execute
             </Typography.Text>
             <Space>
-              <Button size="small" onClick={() => setParams([...params, { key: "", value: "" }])}>+ Param</Button>
+              <Badge count={activeParamCount} size="small" offset={[-4, 0]}>
+                <Button
+                  size="small"
+                  icon={<PlusOutlined />}
+                  type={showParams ? "primary" : "default"}
+                  ghost={showParams}
+                  onClick={() => {
+                    if (!showParams && params.length === 0) {
+                      setParams([{ key: "", value: "" }]);
+                    }
+                    setShowParams(!showParams);
+                  }}
+                >
+                  Params
+                </Button>
+              </Badge>
               <Dropdown
                 menu={{
                   items: exampleQueries.map((eq, i) => ({
@@ -630,16 +652,77 @@ export default function GraphExplorer() {
               </Button>
             </Space>
           </div>
-          {params.length > 0 && (
-            <div style={{ marginTop: 8, padding: "8px 0", borderTop: "1px solid #2a2d3a" }}>
-              <Typography.Text type="secondary" style={{ fontSize: 11, marginBottom: 4, display: "block" }}>Parameters</Typography.Text>
-              {params.map((p, i) => (
-                <Space key={i} style={{ display: "flex", marginBottom: 4 }}>
-                  <Input size="small" placeholder="key" value={p.key} onChange={(e) => { const np = [...params]; np[i] = { ...np[i], key: e.target.value }; setParams(np); }} style={{ width: 120, fontFamily: "monospace" }} />
-                  <Input size="small" placeholder="value" value={p.value} onChange={(e) => { const np = [...params]; np[i] = { ...np[i], value: e.target.value }; setParams(np); }} style={{ width: 200, fontFamily: "monospace" }} />
-                  <Button size="small" type="text" danger onClick={() => setParams(params.filter((_, j) => j !== i))}>×</Button>
+          {showParams && (
+            <div style={{ marginTop: 8, padding: "8px 12px", borderTop: "1px solid #2a2d3a", background: "#1a1c24", borderRadius: "0 0 6px 6px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+                  Query Parameters {activeParamCount > 0 && `(${activeParamCount})`}
+                </Typography.Text>
+                <Space size={4}>
+                  {params.length > 0 && (
+                    <Button size="small" type="text" danger icon={<DeleteOutlined />} onClick={() => { setParams([]); setShowParams(false); }}>
+                      Clear All
+                    </Button>
+                  )}
+                  <Button size="small" type="text" icon={<PlusOutlined />} onClick={() => setParams([...params, { key: "", value: "" }])}>
+                    Add
+                  </Button>
                 </Space>
-              ))}
+              </div>
+              {params.length === 0 ? (
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  No parameters. Click "Add" to add key-value pairs.
+                </Typography.Text>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {params.map((p, i) => (
+                    <Space key={i} style={{ display: "flex" }} align="center">
+                      <Input
+                        size="small"
+                        placeholder="Key"
+                        value={p.key}
+                        onChange={(e) => { const np = [...params]; np[i] = { ...np[i], key: e.target.value }; setParams(np); }}
+                        style={{ width: 130, fontFamily: "monospace" }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            const valueInput = e.currentTarget.parentElement?.querySelector<HTMLInputElement>('input:nth-child(1)');
+                            if (valueInput) valueInput.focus();
+                          }
+                        }}
+                      />
+                      <Input
+                        size="small"
+                        placeholder="Value (JSON or string)"
+                        value={p.value}
+                        onChange={(e) => { const np = [...params]; np[i] = { ...np[i], value: e.target.value }; setParams(np); }}
+                        style={{ width: 220, fontFamily: "monospace" }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault();
+                            if (i === params.length - 1) {
+                              setParams([...params, { key: "", value: "" }]);
+                            }
+                          }
+                        }}
+                      />
+                      <Tooltip title="Remove parameter">
+                        <Button
+                          size="small"
+                          type="text"
+                          danger
+                          icon={<MinusCircleOutlined />}
+                          onClick={() => {
+                            const newParams = params.filter((_, j) => j !== i);
+                            setParams(newParams);
+                            if (newParams.length === 0) setShowParams(false);
+                          }}
+                        />
+                      </Tooltip>
+                    </Space>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </Card>

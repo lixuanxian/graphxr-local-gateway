@@ -7,6 +7,7 @@ import {
   KeyOutlined,
   ExperimentOutlined,
   LinkOutlined,
+  PlusOutlined,
 } from "@ant-design/icons";
 import {
   getStats,
@@ -21,7 +22,11 @@ import {
 } from "../api.ts";
 import { EVENT_CONFIG } from "../utils/event-config.tsx";
 
-export default function Dashboard() {
+interface DashboardProps {
+  onNavigate?: (page: string) => void;
+}
+
+export default function Dashboard({ onNavigate }: DashboardProps) {
   const [stats, setStats] = useState<Stats | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [testResults, setTestResults] = useState<SelfTestResult[] | null>(null);
@@ -138,6 +143,22 @@ export default function Dashboard() {
           </Card>
         </Col>
       </Row>
+
+      {/* Empty state when no providers */}
+      {stats.providerCount === 0 && providers.length === 0 && (
+        <Card style={{ marginTop: 16, textAlign: "center", padding: "24px 0" }}>
+          <ApiOutlined style={{ fontSize: 40, color: "#555", marginBottom: 12 }} />
+          <Typography.Title level={5} style={{ marginBottom: 8 }}>
+            No Providers Configured
+          </Typography.Title>
+          <Typography.Text type="secondary" style={{ display: "block", marginBottom: 16 }}>
+            Connect to a graph database by adding an MCP provider. Use a template for quick setup.
+          </Typography.Text>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => onNavigate?.("providers")}>
+            Add First Provider
+          </Button>
+        </Card>
+      )}
 
       {/* Provider health cards */}
       {providers.length > 0 && (

@@ -24,16 +24,16 @@ const menuItems = [
   { key: "settings", icon: <SettingOutlined />, label: "Settings" },
 ];
 
-const pages: Record<string, React.ReactNode> = {
-  dashboard: <Dashboard />,
-  providers: <Providers />,
-  sessions: <Sessions />,
-  explorer: <GraphExplorer />,
-  settings: <Settings />,
-};
-
 export default function App() {
   const [current, setCurrent] = useState("dashboard");
+
+  const pages: Record<string, React.ReactNode> = {
+    dashboard: <Dashboard onNavigate={setCurrent} />,
+    providers: <Providers />,
+    sessions: <Sessions />,
+    explorer: <GraphExplorer />,
+    settings: <Settings />,
+  };
 
   return (
     <Layout style={{ minHeight: "100vh" }}>

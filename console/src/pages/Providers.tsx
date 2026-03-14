@@ -289,6 +289,23 @@ export default function Providers() {
         rowKey="name"
         pagination={false}
         size="middle"
+        locale={{
+          emptyText: (
+            <div style={{ padding: "40px 0", textAlign: "center" }}>
+              <ApiOutlined style={{ fontSize: 40, color: "#555", marginBottom: 12 }} />
+              <Typography.Title level={5} style={{ marginBottom: 8 }}>
+                No Providers Yet
+              </Typography.Title>
+              <Typography.Paragraph type="secondary" style={{ maxWidth: 400, margin: "0 auto 16px" }}>
+                Providers connect the gateway to graph databases via MCP protocol.
+                Add your first provider to start querying.
+              </Typography.Paragraph>
+              <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
+                Add Provider
+              </Button>
+            </div>
+          ),
+        }}
       />
       <ProviderModal
         open={modalOpen}
