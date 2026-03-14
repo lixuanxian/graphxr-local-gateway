@@ -6,6 +6,8 @@ GraphXR Local Gateway is a localhost-only HTTP service that bridges GraphXR Web 
 
 The gateway connects to graph databases (Neo4j, Spanner Graph, etc.) through their MCP servers, providing a unified GraphXR-compatible API regardless of the underlying database.
 
+**Critical design constraint**: All database connections go through MCP protocol, NOT direct drivers. If direct connections were needed, graphxr-database-proxy would be used instead.
+
 ## Tech Stack
 
 - **Backend**: Node.js + Express 5, TypeScript, ESM modules
@@ -22,47 +24,64 @@ src/                        # Backend source (Express)
   server.ts                 # Express app factory (middleware + routes)
   config/
     config-manager.ts       # Runtime config management + persistence
-  middleware/                # cors, auth (bearer token), host-guard (DNS rebinding protection)
+  middleware/
+    cors.ts                 # CORS with dynamic origins
+    auth.ts                 # Bearer token auth (skips public/console paths)
+    host-guard.ts           # DNS rebinding protection
+    rate-limit.ts           # Per-IP rate limiting with configurable window/max
   routes/
     health.ts               # GET /health
     pair.ts                 # Pairing flow (start, status, approve, deny)
     graph.ts                # Graph operations (schema, neighbors, expand, query)
     catalog.ts              # Provider/dataset discovery
     proxy.ts                # graphxr-database-proxy compatible API
-    console.ts              # Gateway management API
+    console.ts              # Gateway management API (providers, templates, tools, events, settings)
   pairing/                  # PairingManager — session & token lifecycle
   mcp/
-    mcp-manager.ts          # MCP connection lifecycle (stdio + HTTP/SSE), tool auto-discovery
+    mcp-manager.ts          # MCP connection lifecycle (stdio + HTTP/SSE), tool auto-discovery, health checks
     provider-registry.ts    # Provider registry (adapters + status + databaseType)
     provider-templates.ts   # Pre-configured templates for Neo4j, Spanner, etc.
     adapters/
       base-adapter.ts       # Interface: getSchema, getGraphSchema, getNeighbors, expand, query
-      mcp-adapter.ts        # Generic MCP tool caller → GraphDelta converter (db-type-aware)
-      mock-adapter.ts       # Hardcoded demo data
+      mcp-adapter.ts        # Generic MCP tool caller → GraphDelta converter (db-type-aware, retry logic)
+      mock-adapter.ts       # Hardcoded demo data for testing
   types/
-    graph-delta.ts          # GNode (id, labels[], properties), GEdge (startNodeId/endNodeId), GraphSchema, QueryResponse
-    config.ts               # ProviderConfig (with databaseType, toolMapping), GatewayConfig
+    graph-delta.ts          # GNode, GEdge, GraphSchema, CategorySchema, RelationshipSchema, DatabaseType
+    config.ts               # ProviderConfig (with databaseType, toolMapping), GatewayConfig, RateLimitConfig
     api.ts                  # API request/response types + ProxyQueryRequest
-  utils/                    # logger, open-browser
+  utils/
+    logger.ts               # Logger with timestamps, debug mode (GATEWAY_DEBUG env), audit logging
+    open-browser.ts         # Open URL in default browser
 console/                    # React frontend (Vite project)
   src/
     App.tsx                 # Layout + client-side routing
-    api.ts                  # API client with full type definitions
-    pages/                  # Dashboard, Providers, SchemaExplorer, Sessions, GraphExplorer, Settings
-    components/             # StatusBadge, ProviderModal (with template quick-setup)
-tests/                      # Vitest test files (69 tests)
-gateway.config.json         # Runtime config
+    api.ts                  # API client with full type definitions (MCPToolDetail, GraphSchema, etc.)
+    pages/
+      Dashboard.tsx         # Stats, connection events timeline, self-test
+      Providers.tsx         # CRUD table, template quick-setup, tools/events/config detail
+      SchemaExplorer.tsx    # Browse categories and relationships with property types
+      Sessions.tsx          # Pairing history + active tokens with revoke
+      GraphExplorer.tsx     # Query editor with schema sidebar, example queries, history, export
+      Settings.tsx          # CORS, token TTL, pairing timeout, rate limit config
+    components/
+      StatusBadge.tsx       # Color-coded status indicator
+      ProviderModal.tsx     # Add/edit provider with template quick-setup
+tests/                      # Vitest test files (93 tests across 13 files)
+.claude/
+  launch.json               # Dev server configurations for Claude Code
+gateway.config.json         # Runtime config (persisted by ConfigManager)
 ```
 
 ## Common Commands
 
 ```bash
 npm run dev          # Dev: frontend + backend concurrently
-npm run dev:server   # Backend only (tsx watch)
-npm run dev:web      # Console frontend (HMR, proxies to backend)
+npm run dev:server   # Backend only (tsx watch, port 19285)
+npm run dev:web      # Console frontend (Vite HMR, port 5173, proxies API to backend)
 npm run build:web    # Build console to public/console/
 npm run build:server # Build backend to dist/
-npm test             # Run all tests
+npm test             # Run all 93 tests
+npm run test:watch   # Watch mode
 npm start            # Production
 ```
 
@@ -102,35 +121,37 @@ Requires bearer auth. Dataset auto-resolved when provider has exactly one.
 - `GET /api/providers/:provider/graphSchema` — Graph schema (categories + relationships)
 - `GET /api/providers/:provider/schema` — Raw schema as GraphDelta
 
-### Gateway Graph API (internal)
+### Gateway Graph API (internal, requires bearer auth)
 - `POST /graph/schema` — Get schema via provider/dataset
 - `POST /graph/neighbors` — Fetch neighbors of a node
 - `POST /graph/expand` — Expand multiple nodes
 - `POST /graph/query` — Execute raw query
 
-### Console API (local-only, no auth)
-- `GET /api/console/stats` — Dashboard stats
-- `GET /api/console/events` — Connection events log
+### Console API (local-only, no auth, protected by host guard)
+- `GET /api/console/stats` — Dashboard stats (uptime, provider/session/token counts)
+- `GET /api/console/events` — Connection events log (with ?limit=N)
 - `GET /api/console/templates` — Available provider templates
 - `GET /api/console/templates/:id` — Template detail
-- `GET /api/console/providers` — Provider list (with MCP tools)
-- `POST /api/console/providers` — Add provider
-- `PUT /api/console/providers/:name` — Update provider
+- `GET /api/console/providers` — Provider list (with MCP tools array)
+- `POST /api/console/providers` — Add provider (validates name/transport/datasets)
+- `PUT /api/console/providers/:name` — Update provider (disconnect + reconnect)
 - `DELETE /api/console/providers/:name` — Remove provider
-- `POST /api/console/providers/:name/restart` — Restart
-- `GET /api/console/providers/:name/tools` — MCP tool introspection
+- `POST /api/console/providers/:name/restart` — Restart MCP connection
+- `GET /api/console/providers/:name/tools` — MCP tool introspection (names + descriptions + inputSchema)
 - `GET /api/console/providers/:name/schema` — Graph schema for console
-- `GET /api/console/providers/:name/events` — Provider connection events
-- `GET/PUT /api/console/settings` — Gateway settings
+- `GET /api/console/providers/:name/events` — Provider-specific connection events
+- `POST /api/console/providers/:name/test-query` — Execute query from console (no auth needed)
+- `GET/PUT /api/console/settings` — Gateway settings CRUD
 - `GET /api/console/sessions` — Pairing sessions
 - `GET /api/console/tokens` — Active tokens
-- `POST /api/console/self-test` — Health checks
+- `DELETE /api/console/tokens/:tokenPrefix` — Revoke token
+- `POST /api/console/self-test` — Health checks (connectivity, CORS, graph query)
 
 ## MCP Provider Configuration
 
 ### Supported Transports
 - **stdio**: Local process (command + args). Used for Neo4j official MCP, uvx-based servers.
-- **http**: Remote HTTP/SSE (endpoint URL). Used for Spanner MCP Toolbox, managed MCP services.
+- **http**: Remote HTTP/SSE (endpoint URL via StreamableHTTPClientTransport). Auth via env AUTHORIZATION or API_KEY.
 
 ### Provider Templates
 Pre-configured templates for quick setup:
@@ -142,9 +163,10 @@ Pre-configured templates for quick setup:
 
 ### Tool Auto-Discovery
 When connecting to an MCP server, the gateway:
-1. Lists all available tools via `client.listTools()`
+1. Lists all available tools via `client.listTools()` (stores full schemas: name, description, inputSchema)
 2. Auto-maps tools to operations (schema, query, neighbors, expand) based on naming patterns
 3. Supports explicit `toolMapping` override in provider config
+4. Falls back to generating database-specific queries (Cypher for Neo4j, GQL for Spanner) when no dedicated neighbors/expand tools exist
 
 ### Config Example (gateway.config.json)
 ```json
@@ -153,6 +175,7 @@ When connecting to an MCP server, the gateway:
   "allowedOrigins": ["*"],
   "tokenTTL": 28800,
   "pairingTimeout": 300,
+  "rateLimit": { "windowMs": 60000, "max": 60 },
   "providers": [
     {
       "name": "my-neo4j",
@@ -160,11 +183,7 @@ When connecting to an MCP server, the gateway:
       "databaseType": "neo4j",
       "command": "neo4j-mcp-server",
       "args": [],
-      "env": {
-        "NEO4J_URI": "bolt://localhost:7687",
-        "NEO4J_USERNAME": "neo4j",
-        "NEO4J_PASSWORD": "password"
-      },
+      "env": { "NEO4J_URI": "bolt://localhost:7687", "NEO4J_USERNAME": "neo4j", "NEO4J_PASSWORD": "password" },
       "datasets": ["movies"]
     },
     {
@@ -173,9 +192,7 @@ When connecting to an MCP server, the gateway:
       "databaseType": "spanner",
       "endpoint": "http://localhost:5000/mcp",
       "datasets": ["my-graph"],
-      "env": {
-        "GOOGLE_APPLICATION_CREDENTIALS": "/path/to/sa.json"
-      }
+      "env": { "GOOGLE_APPLICATION_CREDENTIALS": "/path/to/sa.json" }
     }
   ]
 }
@@ -183,17 +200,25 @@ When connecting to an MCP server, the gateway:
 
 ## Testing
 
-Tests in `tests/`, run with `npm test`. 69 tests across 10 files:
+Tests in `tests/`, run with `npm test`. **93 tests across 13 files**:
 - `tests/middleware/cors.test.ts` — CORS middleware
+- `tests/middleware/rate-limit.test.ts` — Rate limiting (5 tests)
 - `tests/pairing/pairing-manager.test.ts` — Pairing lifecycle
 - `tests/routes/health.test.ts` — Health + CORS integration
 - `tests/routes/proxy.test.ts` — Proxy-compatible API (query, schema, graphSchema)
+- `tests/routes/catalog.test.ts` — Catalog route tests
+- `tests/routes/graph.test.ts` — Graph route integration tests
 - `tests/routes/console-settings.test.ts` — Settings CRUD
 - `tests/routes/console-providers.test.ts` — Provider CRUD
 - `tests/routes/console-templates.test.ts` — Templates + tools API
 - `tests/routes/console-self-test.test.ts` — Self-test endpoint
 - `tests/routes/console-events.test.ts` — Connection events API
 - `tests/mcp/mcp-adapter.test.ts` — MCP adapter data normalization (14 tests)
+
+### Test patterns
+- Use `createTestApp()` helpers to create isolated Express app instances
+- Auth-required routes: use `getAuthToken(pm)` helper that does a pairing flow
+- Mock MCP adapters for unit tests, real Express + Supertest for integration tests
 
 ## Key Architecture Decisions
 
@@ -206,13 +231,26 @@ Tests in `tests/`, run with `npm test`. 69 tests across 10 files:
 - **Dynamic config**: Providers can be managed at runtime via Console, persisted to disk
 - **Health monitoring**: Periodic health checks (30s) with auto-reconnect on failure (up to 5 attempts)
 - **Retry logic**: MCP tool calls retry up to 2 times on transient failures with exponential backoff
-- **Connection events**: Full event log for monitoring connection lifecycle (connect, disconnect, reconnect, health)
+- **Rate limiting**: Per-IP rate limiting on API routes (skips console/public paths)
+- **Connection events**: Full event log for monitoring connection lifecycle
+- **Query fallback**: Generates Cypher/GQL queries when MCP servers lack dedicated neighbor/expand tools
 
 ## Console Pages
 
 - **Dashboard**: Stats, connection events timeline, self-test
-- **Providers**: CRUD table, detail drawer (tools, events, config), template quick-setup
+- **Providers**: CRUD table, detail drawer (tools with schemas, events, config), template quick-setup
 - **Schema Explorer**: Browse node categories and relationships with property types
 - **Sessions & Tokens**: Pairing history, active tokens with relative times, revoke with confirm
-- **Graph Explorer**: Query with structured table view (nodes/edges), toggle JSON view, db-aware placeholders
-- **Settings**: CORS, token TTL, pairing timeout with descriptions and validation
+- **Graph Explorer**: Query editor with schema sidebar (clickable categories/relationships), database-aware example queries, query history (localStorage), JSON export/copy, Ctrl+Enter execution
+- **Settings**: CORS origins, token TTL, pairing timeout with descriptions and validation
+
+## Development Guidelines
+
+- Always use MCP protocol for database connections — never import direct database drivers
+- Keep all server bindings to `127.0.0.1` — this is a security requirement
+- Run `npm test` before committing — all tests must pass
+- Use the existing test patterns (createTestApp, getAuthToken) when adding new test files
+- Console development uses Vite proxy — API calls during dev are forwarded to the backend on :19285
+- The `console/` directory is a separate Vite project with its own tsconfig and package.json
+- Build console (`npm run build:web`) to update the static files served by the backend
+- Express 5 route syntax: use `{*path}` instead of `*` for catch-all routes
