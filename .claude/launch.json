@@ -2,22 +2,16 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "Backend (Express + MCP Gateway)",
-      "runtimeExecutable": "npx",
-      "runtimeArgs": ["tsx", "watch", "src/index.ts"],
+      "name": "backend",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["--import", "tsx/esm", "--watch", "src/index.ts"],
       "port": 19285
     },
     {
-      "name": "Console (Vite Dev Server)",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "name": "console",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["node_modules/vite/bin/vite.js"],
       "port": 5173
-    },
-    {
-      "name": "Tests (Vitest Watch)",
-      "runtimeExecutable": "npx",
-      "runtimeArgs": ["vitest"],
-      "port": 0
     }
   ]
 }
