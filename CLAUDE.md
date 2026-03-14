@@ -66,7 +66,7 @@ console/                    # React frontend (Vite project)
     components/
       StatusBadge.tsx       # Color-coded status indicator
       ProviderModal.tsx     # Add/edit provider with template quick-setup
-tests/                      # Vitest test files (93 tests across 13 files)
+tests/                      # Vitest test files (101 tests across 13 files)
 .claude/
   launch.json               # Dev server configurations for Claude Code
 gateway.config.json         # Runtime config (persisted by ConfigManager)
@@ -80,7 +80,7 @@ npm run dev:server   # Backend only (tsx watch, port 19285)
 npm run dev:web      # Console frontend (Vite HMR, port 5173, proxies API to backend)
 npm run build:web    # Build console to public/console/
 npm run build:server # Build backend to dist/
-npm test             # Run all 93 tests
+npm test             # Run all 101 tests
 npm run test:watch   # Watch mode
 npm start            # Production
 ```
@@ -145,6 +145,8 @@ Requires bearer auth. Dataset auto-resolved when provider has exactly one.
 - `GET /api/console/sessions` — Pairing sessions
 - `GET /api/console/tokens` — Active tokens
 - `DELETE /api/console/tokens/:tokenPrefix` — Revoke token
+- `POST /api/console/providers/:name/test` — Per-provider connection test (schema, query, tools)
+- `GET /api/console/events/stream` — SSE stream for real-time connection events
 - `POST /api/console/self-test` — Health checks (connectivity, CORS, graph query)
 
 ## MCP Provider Configuration
@@ -200,7 +202,7 @@ When connecting to an MCP server, the gateway:
 
 ## Testing
 
-Tests in `tests/`, run with `npm test`. **93 tests across 13 files**:
+Tests in `tests/`, run with `npm test`. **101 tests across 13 files**:
 - `tests/middleware/cors.test.ts` — CORS middleware
 - `tests/middleware/rate-limit.test.ts` — Rate limiting (5 tests)
 - `tests/pairing/pairing-manager.test.ts` — Pairing lifecycle
@@ -241,7 +243,7 @@ Tests in `tests/`, run with `npm test`. **93 tests across 13 files**:
 - **Providers**: CRUD table, detail drawer (tools with schemas, events, config), template quick-setup
 - **Schema Explorer**: Browse node categories and relationships with property types
 - **Sessions & Tokens**: Pairing history, active tokens with relative times, revoke with confirm
-- **Graph Explorer**: Query editor with schema sidebar (clickable categories/relationships), database-aware example queries, query history (localStorage), JSON export/copy, Ctrl+Enter execution
+- **Graph Explorer**: Query editor with schema sidebar (clickable categories/relationships generate queries), database-aware example queries, query history (localStorage, last 20), JSON export/copy, Ctrl+Enter execution, query parameter support
 - **Settings**: CORS origins, token TTL, pairing timeout with descriptions and validation
 
 ## Development Guidelines
