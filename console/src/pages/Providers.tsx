@@ -39,9 +39,11 @@ import {
   restartProvider,
   getProviderTools,
   getProviderEvents,
+  testProviderConnection,
   type ProviderInfo,
   type ProviderConfig,
   type ProviderTools,
+  type ProviderTestResult,
   type ConnectionEvent,
 } from "../api.ts";
 
@@ -79,6 +81,8 @@ export default function Providers() {
   const [detailProvider, setDetailProvider] = useState<ProviderInfo | null>(null);
   const [detailTools, setDetailTools] = useState<ProviderTools | null>(null);
   const [detailEvents, setDetailEvents] = useState<ConnectionEvent[]>([]);
+  const [testResult, setTestResult] = useState<ProviderTestResult | null>(null);
+  const [testing, setTesting] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -94,6 +98,7 @@ export default function Providers() {
   const openDetail = async (record: ProviderInfo) => {
     setDetailProvider(record);
     setDrawerOpen(true);
+    setTestResult(null);
     // Load tools and events in parallel
     Promise.all([
       getProviderTools(record.name).catch(() => null),
@@ -102,6 +107,19 @@ export default function Providers() {
       setDetailTools(tools);
       setDetailEvents(events);
     });
+  };
+
+  const runProviderTest = async (name: string) => {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const result = await testProviderConnection(name);
+      setTestResult(result);
+    } catch (err: any) {
+      message.error(`Test failed: ${err.message}`);
+    } finally {
+      setTesting(false);
+    }
   };
 
   const handleAdd = () => {
@@ -390,6 +408,35 @@ export default function Providers() {
               <Typography.Text type="secondary">
                 Tools information not available
               </Typography.Text>
+            )}
+
+            {/* Connection Test */}
+            <Divider orientation="left" style={{ fontSize: 13 }}>
+              <CheckCircleOutlined /> Connection Test
+            </Divider>
+            <Button
+              type="primary"
+              size="small"
+              loading={testing}
+              onClick={() => detailProvider && runProviderTest(detailProvider.name)}
+              style={{ marginBottom: 8 }}
+            >
+              Test Connection
+            </Button>
+            {testResult && (
+              <List
+                size="small"
+                dataSource={testResult.results}
+                renderItem={(item) => (
+                  <List.Item>
+                    <Tag color={item.status === "pass" ? "green" : "red"}>{item.status.toUpperCase()}</Tag>
+                    <Typography.Text strong style={{ width: 80, display: "inline-block" }}>{item.check}</Typography.Text>
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                      {item.detail} {item.ms > 0 ? `(${item.ms}ms)` : ""}
+                    </Typography.Text>
+                  </List.Item>
+                )}
+              />
             )}
 
             {/* Connection Events */}

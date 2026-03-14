@@ -234,6 +234,20 @@ export const getProviderEvents = (name: string, limit = 20) =>
     `/api/console/providers/${encodeURIComponent(name)}/events?limit=${limit}`
   ).then((r) => r.events);
 
+// --- Provider Connection Test ---
+export interface ProviderTestResult {
+  provider: string;
+  dataset: string;
+  overall: "pass" | "fail";
+  results: Array<{ check: string; status: "pass" | "fail"; detail: string; ms: number }>;
+}
+
+export const testProviderConnection = (name: string) =>
+  fetchJSON<ProviderTestResult>(
+    `/api/console/providers/${encodeURIComponent(name)}/test`,
+    { method: "POST" }
+  );
+
 // --- Health ---
 export interface HealthResponse {
   status: string;

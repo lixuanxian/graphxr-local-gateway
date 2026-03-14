@@ -372,6 +372,64 @@ export function consoleRouter(
     }
   });
 
+  // ─── Provider Connection Test ──────────────────────────
+
+  router.post("/api/console/providers/:name/test", async (req, res) => {
+    const { name } = req.params;
+    const adapter = providerRegistry.getAdapter(name);
+    if (!adapter) {
+      res.status(404).json({ error: `Provider "${name}" not found or not connected` });
+      return;
+    }
+
+    const datasets = providerRegistry.listDatasets(name);
+    const dataset = datasets?.[0] ?? "default";
+    const results: Array<{ check: string; status: "pass" | "fail"; detail: string; ms: number }> = [];
+
+    // 1. Test schema retrieval
+    const schemaStart = Date.now();
+    try {
+      const schema = await adapter.getGraphSchema(dataset);
+      results.push({
+        check: "Schema",
+        status: "pass",
+        detail: `${schema.categories.length} categories, ${schema.relationships.length} relationships`,
+        ms: Date.now() - schemaStart,
+      });
+    } catch (err: any) {
+      results.push({ check: "Schema", status: "fail", detail: err.message, ms: Date.now() - schemaStart });
+    }
+
+    // 2. Test a simple query
+    const queryStart = Date.now();
+    try {
+      const providerInfo = providerRegistry.listProviders().find((p) => p.name === name);
+      const dbType = providerInfo?.databaseType ?? "generic";
+      const testQuery = dbType === "spanner" ? "SELECT 1" : "RETURN 1 AS test";
+      const result = await adapter.query(dataset, testQuery, { limit: 1 });
+      results.push({
+        check: "Query",
+        status: "pass",
+        detail: `${result.nodes?.length ?? 0} nodes, ${result.edges?.length ?? 0} edges`,
+        ms: Date.now() - queryStart,
+      });
+    } catch (err: any) {
+      results.push({ check: "Query", status: "fail", detail: err.message, ms: Date.now() - queryStart });
+    }
+
+    // 3. Check MCP tools
+    const tools = mcpManager.getProviderTools(name);
+    results.push({
+      check: "MCP Tools",
+      status: tools && tools.length > 0 ? "pass" : "fail",
+      detail: tools ? `${tools.length} tools available` : "No tools found",
+      ms: 0,
+    });
+
+    const overall = results.every((r) => r.status === "pass") ? "pass" : "fail";
+    res.json({ provider: name, dataset, overall, results });
+  });
+
   // ─── Self-Test ───────────────────────────────────────────
 
   router.post("/api/console/self-test", async (_req, res) => {
