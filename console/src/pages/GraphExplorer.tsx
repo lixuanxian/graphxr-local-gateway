@@ -28,6 +28,7 @@ import {
   CopyOutlined,
   ThunderboltOutlined,
   DatabaseOutlined,
+  ExpandOutlined,
 } from "@ant-design/icons";
 import {
   getProviders,
@@ -126,58 +127,6 @@ function getExampleQueries(dbType?: string, schema?: GraphSchema | null): { labe
       ];
   }
 }
-
-const NODE_COLUMNS: ColumnsType<GNode> = [
-  {
-    title: "ID",
-    dataIndex: "id",
-    key: "id",
-    width: 200,
-    ellipsis: true,
-    render: (id: string) => (
-      <Typography.Text code copyable={{ text: id }}>
-        {id.length > 24 ? id.slice(0, 24) + "..." : id}
-      </Typography.Text>
-    ),
-  },
-  {
-    title: "Labels",
-    key: "labels",
-    width: 200,
-    render: (_, node) => {
-      const labels = node.labels ?? (node.type ? [node.type] : []);
-      return labels.map((l) => (
-        <Tag key={l} color="blue">
-          {l}
-        </Tag>
-      ));
-    },
-  },
-  {
-    title: "Properties",
-    key: "properties",
-    render: (_, node) => {
-      const props = node.properties ?? {};
-      const keys = Object.keys(props);
-      if (keys.length === 0) return <Typography.Text type="secondary">-</Typography.Text>;
-      const display = keys.slice(0, 4);
-      return (
-        <Space size={4} wrap>
-          {display.map((k) => (
-            <Tooltip key={k} title={`${k}: ${JSON.stringify(props[k])}`}>
-              <Tag>
-                {k}: {truncateValue(props[k])}
-              </Tag>
-            </Tooltip>
-          ))}
-          {keys.length > 4 && (
-            <Typography.Text type="secondary">+{keys.length - 4} more</Typography.Text>
-          )}
-        </Space>
-      );
-    },
-  },
-];
 
 const EDGE_COLUMNS: ColumnsType<GEdge> = [
   {
@@ -353,6 +302,80 @@ export default function GraphExplorer() {
     }
   }, [queryStr, provider, dataset, limit, history, params]);
 
+  const nodeColumns: ColumnsType<GNode> = useMemo(() => [
+    {
+      title: "ID",
+      dataIndex: "id",
+      key: "id",
+      width: 180,
+      ellipsis: true,
+      render: (id: string) => (
+        <Typography.Text code copyable={{ text: id }}>
+          {id.length > 20 ? id.slice(0, 20) + "..." : id}
+        </Typography.Text>
+      ),
+    },
+    {
+      title: "Labels",
+      key: "labels",
+      width: 180,
+      render: (_: unknown, node: GNode) => {
+        const labels = node.labels ?? (node.type ? [node.type] : []);
+        return labels.map((l) => (
+          <Tag key={l} color="blue">{l}</Tag>
+        ));
+      },
+    },
+    {
+      title: "Properties",
+      key: "properties",
+      render: (_: unknown, node: GNode) => {
+        const props = node.properties ?? {};
+        const keys = Object.keys(props);
+        if (keys.length === 0) return <Typography.Text type="secondary">-</Typography.Text>;
+        const display = keys.slice(0, 4);
+        return (
+          <Space size={4} wrap>
+            {display.map((k) => (
+              <Tooltip key={k} title={`${k}: ${JSON.stringify(props[k])}`}>
+                <Tag>{k}: {truncateValue(props[k])}</Tag>
+              </Tooltip>
+            ))}
+            {keys.length > 4 && (
+              <Typography.Text type="secondary">+{keys.length - 4} more</Typography.Text>
+            )}
+          </Space>
+        );
+      },
+    },
+    {
+      title: "",
+      key: "actions",
+      width: 80,
+      render: (_: unknown, node: GNode) => (
+        <Tooltip title="Expand neighbors">
+          <Button
+            size="small"
+            type="text"
+            icon={<ExpandOutlined />}
+            onClick={() => {
+              const nodeId = node.id;
+              const dbType = selectedProvider?.databaseType;
+              let q: string;
+              if (dbType === "spanner") {
+                q = `GRAPH FinGraph MATCH (n)-[r]-(m) WHERE n.id = '${nodeId}' RETURN n, r, m LIMIT ${limit}`;
+              } else {
+                q = `MATCH (n)-[r]-(m) WHERE id(n) = '${nodeId}' OR n.id = '${nodeId}' RETURN n, r, m LIMIT ${limit}`;
+              }
+              setQueryStr(q);
+              runQuery(q);
+            }}
+          />
+        </Tooltip>
+      ),
+    },
+  ], [selectedProvider?.databaseType, limit, runQuery]);
+
   const handleExampleClick = (query: string) => {
     setQueryStr(query);
     runQuery(query);
@@ -376,7 +399,6 @@ export default function GraphExplorer() {
 
   const nodes = result?.nodes ?? [];
   const edges = result?.edges ?? [];
-  const counts = result?.summary?.counts;
 
   return (
     <div style={{ display: "flex", gap: 16 }}>
@@ -631,12 +653,10 @@ export default function GraphExplorer() {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <Space>
                 <Typography.Text strong>Results</Typography.Text>
-                {counts && (
-                  <Space size={8}>
-                    <Tag icon={<NodeIndexOutlined />} color="blue">{counts.nodes} nodes</Tag>
-                    <Tag icon={<BranchesOutlined />} color="orange">{counts.edges} edges</Tag>
-                  </Space>
-                )}
+                <Space size={8}>
+                  <Tag icon={<NodeIndexOutlined />} color="blue">{nodes.length} nodes</Tag>
+                  <Tag icon={<BranchesOutlined />} color="orange">{edges.length} edges</Tag>
+                </Space>
                 {result.summary?.executionTime != null && (
                   <Typography.Text type="secondary">{result.summary.executionTime}ms</Typography.Text>
                 )}
@@ -665,7 +685,7 @@ export default function GraphExplorer() {
               <>
                 {nodes.length > 0 && (
                   <Card size="small" title={<Space><NodeIndexOutlined /><span>Nodes ({nodes.length})</span></Space>} style={{ marginBottom: 12 }}>
-                    <Table columns={NODE_COLUMNS} dataSource={nodes} rowKey="id" pagination={nodes.length > 20 ? { pageSize: 20 } : false} size="small" scroll={{ x: 600 }} />
+                    <Table columns={nodeColumns} dataSource={nodes} rowKey="id" pagination={nodes.length > 20 ? { pageSize: 20 } : false} size="small" scroll={{ x: 600 }} />
                   </Card>
                 )}
                 {edges.length > 0 && (

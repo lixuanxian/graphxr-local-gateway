@@ -5,6 +5,21 @@ import type { ConfigManager } from "../config/config-manager.js";
 import { PROVIDER_TEMPLATES, getTemplate } from "../mcp/provider-templates.js";
 import { logger } from "../utils/logger.js";
 
+const SENSITIVE_KEYS = /password|secret|token|key|credentials|api_key|auth/i;
+
+function maskEnv(env?: Record<string, string>): Record<string, string> | undefined {
+  if (!env) return undefined;
+  const masked: Record<string, string> = {};
+  for (const [k, v] of Object.entries(env)) {
+    if (SENSITIVE_KEYS.test(k) && v.length > 4) {
+      masked[k] = v.slice(0, 4) + "****";
+    } else {
+      masked[k] = v;
+    }
+  }
+  return masked;
+}
+
 const startTime = Date.now();
 
 export function consoleRouter(
@@ -120,7 +135,7 @@ export function consoleRouter(
         tools: mcpManager.getProviderTools(p.name) ?? [],
         command: config?.command,
         args: config?.args,
-        env: config?.env,
+        env: maskEnv(config?.env),
         endpoint: config?.endpoint,
         toolMapping: config?.toolMapping,
       };
@@ -335,24 +350,26 @@ export function consoleRouter(
     const providers = providerRegistry.listProviders();
     res.write(`event: providers\ndata: ${JSON.stringify(providers)}\n\n`);
 
-    // Poll for new events every 2 seconds
-    let lastEventCount = mcpManager.getConnectionEvents(1000).length;
-    const interval = setInterval(() => {
-      const allEvents = mcpManager.getConnectionEvents(1000);
-      if (allEvents.length > lastEventCount) {
-        const newEvents = allEvents.slice(lastEventCount);
-        for (const evt of newEvents) {
-          res.write(`event: connection\ndata: ${JSON.stringify(evt)}\n\n`);
-        }
+    // Push-based: subscribe to new events
+    const onEvent = (evt: any) => {
+      try {
+        res.write(`event: connection\ndata: ${JSON.stringify(evt)}\n\n`);
         // Also send updated provider list
         const updatedProviders = providerRegistry.listProviders();
         res.write(`event: providers\ndata: ${JSON.stringify(updatedProviders)}\n\n`);
-        lastEventCount = allEvents.length;
-      }
-    }, 2000);
+      } catch { /* connection may be closed */ }
+    };
+
+    mcpManager.onConnectionEvent(onEvent);
+
+    // Keep-alive ping every 30 seconds to prevent timeout
+    const keepAlive = setInterval(() => {
+      try { res.write(`: keepalive\n\n`); } catch { /* ignore */ }
+    }, 30000);
 
     req.on("close", () => {
-      clearInterval(interval);
+      mcpManager.offConnectionEvent(onEvent);
+      clearInterval(keepAlive);
     });
   });
 

@@ -26,6 +26,20 @@ interface Props {
   loading?: boolean;
 }
 
+function EnvValueInput({ fieldName, form }: { fieldName: number; form: ReturnType<typeof Form.useForm>[0] }) {
+  const key = Form.useWatch(["envList", fieldName, "key"], form);
+  const isSensitive = /password|secret|token|key|credentials|api_key|auth/i.test(key || "");
+  return (
+    <Form.Item name={[fieldName, "value"]} noStyle>
+      {isSensitive ? (
+        <Input.Password placeholder="value (sensitive)" style={{ width: 250 }} />
+      ) : (
+        <Input placeholder="value" style={{ width: 250 }} />
+      )}
+    </Form.Item>
+  );
+}
+
 export default function ProviderModal({ open, editData, onOk, onCancel, loading }: Props) {
   const [form] = Form.useForm();
   const transport = Form.useWatch("transport", form);
@@ -219,9 +233,7 @@ export default function ProviderModal({ open, editData, onOk, onCancel, loading 
                     <Form.Item name={[field.name, "key"]} noStyle>
                       <Input placeholder="KEY" style={{ width: 200 }} />
                     </Form.Item>
-                    <Form.Item name={[field.name, "value"]} noStyle>
-                      <Input placeholder="value" style={{ width: 250 }} />
-                    </Form.Item>
+                    <EnvValueInput fieldName={field.name} form={form} />
                     <MinusCircleOutlined onClick={() => remove(field.name)} />
                   </Space>
                 ))}

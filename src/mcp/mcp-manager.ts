@@ -45,6 +45,15 @@ export class MCPManager {
   readonly registry = new ProviderRegistry();
   private healthTimer?: ReturnType<typeof setInterval>;
   private connectionEvents: ConnectionEvent[] = [];
+  private eventListeners = new Set<(event: ConnectionEvent) => void>();
+
+  onConnectionEvent(listener: (event: ConnectionEvent) => void): void {
+    this.eventListeners.add(listener);
+  }
+
+  offConnectionEvent(listener: (event: ConnectionEvent) => void): void {
+    this.eventListeners.delete(listener);
+  }
 
   /**
    * Initialize all providers from config.
@@ -359,10 +368,15 @@ export class MCPManager {
   }
 
   private pushEvent(provider: string, event: ConnectionEvent["event"], detail?: string): void {
-    this.connectionEvents.push({ provider, event, timestamp: Date.now(), detail });
+    const evt: ConnectionEvent = { provider, event, timestamp: Date.now(), detail };
+    this.connectionEvents.push(evt);
     // Trim old events
     if (this.connectionEvents.length > MAX_CONNECTION_EVENTS) {
       this.connectionEvents = this.connectionEvents.slice(-MAX_CONNECTION_EVENTS);
+    }
+    // Notify all listeners
+    for (const listener of this.eventListeners) {
+      try { listener(evt); } catch { /* ignore listener errors */ }
     }
   }
 

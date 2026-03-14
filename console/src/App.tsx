@@ -12,6 +12,7 @@ import Providers from "./pages/Providers.tsx";
 import Sessions from "./pages/Sessions.tsx";
 import GraphExplorer from "./pages/GraphExplorer.tsx";
 import Settings from "./pages/Settings.tsx";
+import ErrorBoundary from "./components/ErrorBoundary.tsx";
 
 const { Sider, Content, Header } = Layout;
 
@@ -89,7 +90,9 @@ export default function App() {
             overflow: "auto",
           }}
         >
-          {pages[current]}
+          <ErrorBoundary key={current}>
+            {pages[current]}
+          </ErrorBoundary>
         </Content>
       </Layout>
     </Layout>

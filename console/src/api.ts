@@ -1,7 +1,15 @@
 const BASE = "";
 
 async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${url}`, init);
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${url}`, init);
+  } catch (err: any) {
+    if (err.name === "TypeError") {
+      throw new Error("Gateway is unreachable — is the backend running on port 19285?");
+    }
+    throw err;
+  }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error((body as any).error || `HTTP ${res.status}`);
@@ -274,14 +282,35 @@ export function subscribeToEvents(
   onConnection: (event: ConnectionEvent) => void,
   onProviders: (providers: ProviderInfo[]) => void,
 ): () => void {
-  const es = new EventSource("/api/console/events/stream");
-  es.addEventListener("connection", (e) => {
-    try { onConnection(JSON.parse(e.data)); } catch { /* ignore parse errors */ }
-  });
-  es.addEventListener("providers", (e) => {
-    try { onProviders(JSON.parse(e.data)); } catch { /* ignore parse errors */ }
-  });
-  return () => es.close();
+  let es: EventSource | null = null;
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let stopped = false;
+
+  function connect() {
+    if (stopped) return;
+    es = new EventSource("/api/console/events/stream");
+    es.addEventListener("connection", (e) => {
+      try { onConnection(JSON.parse(e.data)); } catch { /* ignore */ }
+    });
+    es.addEventListener("providers", (e) => {
+      try { onProviders(JSON.parse(e.data)); } catch { /* ignore */ }
+    });
+    es.onerror = () => {
+      es?.close();
+      es = null;
+      if (!stopped) {
+        reconnectTimer = setTimeout(connect, 5000);
+      }
+    };
+  }
+
+  connect();
+
+  return () => {
+    stopped = true;
+    es?.close();
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+  };
 }
 
 // --- Health ---
