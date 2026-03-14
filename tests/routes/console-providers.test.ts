@@ -54,6 +54,42 @@ describe("Console Providers API", () => {
     expect(res.status).toBe(400);
   });
 
+  it("POST /api/console/providers rejects invalid name format", async () => {
+    const res = await request(app)
+      .post("/api/console/providers")
+      .set("Host", "127.0.0.1:19285")
+      .send({ name: "has spaces!", transport: "stdio", command: "echo", datasets: ["test"] });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/name must contain only/);
+  });
+
+  it("POST /api/console/providers rejects stdio without command", async () => {
+    const res = await request(app)
+      .post("/api/console/providers")
+      .set("Host", "127.0.0.1:19285")
+      .send({ name: "test-stdio", transport: "stdio", datasets: ["test"] });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/command/);
+  });
+
+  it("POST /api/console/providers rejects http without endpoint", async () => {
+    const res = await request(app)
+      .post("/api/console/providers")
+      .set("Host", "127.0.0.1:19285")
+      .send({ name: "test-http", transport: "http", datasets: ["test"] });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/endpoint/);
+  });
+
+  it("POST /api/console/providers rejects invalid transport", async () => {
+    const res = await request(app)
+      .post("/api/console/providers")
+      .set("Host", "127.0.0.1:19285")
+      .send({ name: "test-bad", transport: "websocket", datasets: ["test"] });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/transport/);
+  });
+
   it("POST /api/console/providers rejects duplicate name", async () => {
     const res = await request(app)
       .post("/api/console/providers")
