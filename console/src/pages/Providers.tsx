@@ -329,29 +329,58 @@ export default function Providers() {
             </Divider>
             {detailTools ? (
               <>
-                {detailTools.tools.length > 0 ? (
+                {detailTools.toolDetails && detailTools.toolDetails.length > 0 ? (
                   <List
                     size="small"
-                    dataSource={detailTools.tools}
-                    renderItem={(tool) => {
+                    dataSource={detailTools.toolDetails}
+                    renderItem={(td) => {
                       const mappedAs = Object.entries(detailTools.toolMapping)
-                        .filter(([, v]) => v === tool)
+                        .filter(([, v]) => v === td.name)
                         .map(([k]) => k);
                       return (
-                        <List.Item>
-                          <Typography.Text code>{tool}</Typography.Text>
-                          {mappedAs.length > 0 && (
-                            <Space style={{ marginLeft: 8 }}>
-                              {mappedAs.map((m) => (
-                                <Tag key={m} color="geekblue" style={{ fontSize: 11 }}>
-                                  {m}
+                        <List.Item style={{ display: "block" }}>
+                          <div>
+                            <Typography.Text code>{td.name}</Typography.Text>
+                            {mappedAs.length > 0 && (
+                              <Space style={{ marginLeft: 8 }}>
+                                {mappedAs.map((m) => (
+                                  <Tag key={m} color="geekblue" style={{ fontSize: 11 }}>
+                                    {m}
+                                  </Tag>
+                                ))}
+                              </Space>
+                            )}
+                          </div>
+                          {td.description && (
+                            <Typography.Text type="secondary" style={{ fontSize: 12, display: "block", marginTop: 2 }}>
+                              {td.description}
+                            </Typography.Text>
+                          )}
+                          {td.inputSchema && Object.keys(td.inputSchema).length > 0 && (
+                            <div style={{ marginTop: 4 }}>
+                              {Object.entries(
+                                (td.inputSchema as any).properties ?? {}
+                              ).map(([key, val]: [string, any]) => (
+                                <Tag key={key} style={{ fontSize: 10, marginBottom: 2 }}>
+                                  {key}: {val?.type ?? "any"}
+                                  {(td.inputSchema as any).required?.includes(key) ? " *" : ""}
                                 </Tag>
                               ))}
-                            </Space>
+                            </div>
                           )}
                         </List.Item>
                       );
                     }}
+                  />
+                ) : detailTools.tools.length > 0 ? (
+                  <List
+                    size="small"
+                    dataSource={detailTools.tools}
+                    renderItem={(tool) => (
+                      <List.Item>
+                        <Typography.Text code>{tool}</Typography.Text>
+                      </List.Item>
+                    )}
                   />
                 ) : (
                   <Typography.Text type="secondary">No tools discovered</Typography.Text>
