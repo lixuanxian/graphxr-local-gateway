@@ -33,6 +33,7 @@ export default function Settings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [authEnabled, setAuthEnabled] = useState(false);
   const [allowAll, setAllowAll] = useState(false);
   const [origins, setOrigins] = useState<string[]>([]);
   const { message } = AntdApp.useApp();
@@ -45,6 +46,7 @@ export default function Settings() {
     getSettings()
       .then((s) => {
         setSettings(s);
+        setAuthEnabled(s.authEnabled);
         const isWildcard = s.allowedOrigins.length === 1 && s.allowedOrigins[0] === "*";
         setAllowAll(isWildcard);
         setOrigins(isWildcard ? [] : s.allowedOrigins);
@@ -67,6 +69,7 @@ export default function Settings() {
     try {
       const values = form.getFieldsValue();
       const updated = await updateSettings({
+        authEnabled,
         allowedOrigins: allowAll ? ["*"] : origins,
         tokenTTL: values.tokenTTL,
         pairingTimeout: values.pairingTimeout,
@@ -112,6 +115,23 @@ export default function Settings() {
 
       <Card style={{ maxWidth: 640 }} title="Runtime Settings">
         <Form form={form} layout="vertical">
+          {/* Authentication */}
+          <Form.Item
+            label="Bearer Token Authentication"
+            extra={authEnabled
+              ? "Clients must pair and obtain a bearer token to access API endpoints."
+              : "Authentication is disabled. All API endpoints are accessible without a token."}
+          >
+            <Space>
+              <Switch checked={authEnabled} onChange={setAuthEnabled} />
+              <Typography.Text>
+                {authEnabled ? "Enabled — clients must authenticate" : "Disabled — open access (development mode)"}
+              </Typography.Text>
+            </Space>
+          </Form.Item>
+
+          <Divider />
+
           {/* Allowed Origins */}
           <Form.Item
             label="CORS Allowed Origins"
@@ -137,35 +157,39 @@ export default function Settings() {
             </Space>
           </Form.Item>
 
-          <Divider />
+          {authEnabled && (
+            <>
+              <Divider />
 
-          {/* Token TTL */}
-          <Form.Item
-            label="Bearer Token TTL"
-            name="tokenTTL"
-            extra={`Tokens expire after ${formatDuration(tokenTTL ?? settings.tokenTTL)}. Clients must re-pair after expiration.`}
-          >
-            <InputNumber
-              min={60}
-              max={604800}
-              addonAfter="seconds"
-              style={{ width: 220 }}
-            />
-          </Form.Item>
+              {/* Token TTL */}
+              <Form.Item
+                label="Bearer Token TTL"
+                name="tokenTTL"
+                extra={`Tokens expire after ${formatDuration(tokenTTL ?? settings.tokenTTL)}. Clients must re-pair after expiration.`}
+              >
+                <InputNumber
+                  min={60}
+                  max={604800}
+                  addonAfter="seconds"
+                  style={{ width: 220 }}
+                />
+              </Form.Item>
 
-          {/* Pairing Timeout */}
-          <Form.Item
-            label="Pairing Request Timeout"
-            name="pairingTimeout"
-            extra={`Users have ${formatDuration(pairingTimeout ?? settings.pairingTimeout)} to approve or deny a pairing request.`}
-          >
-            <InputNumber
-              min={30}
-              max={3600}
-              addonAfter="seconds"
-              style={{ width: 220 }}
-            />
-          </Form.Item>
+              {/* Pairing Timeout */}
+              <Form.Item
+                label="Pairing Request Timeout"
+                name="pairingTimeout"
+                extra={`Users have ${formatDuration(pairingTimeout ?? settings.pairingTimeout)} to approve or deny a pairing request.`}
+              >
+                <InputNumber
+                  min={30}
+                  max={3600}
+                  addonAfter="seconds"
+                  style={{ width: 220 }}
+                />
+              </Form.Item>
+            </>
+          )}
 
           <Divider />
 

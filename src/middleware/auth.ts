@@ -7,7 +7,7 @@ import type { PairingManager } from "../pairing/pairing-manager.js";
  */
 const PUBLIC_PATHS = new Set(["/health", "/pair/start", "/pair/status", "/pair/confirm", "/pair/approve"]);
 
-export function authMiddleware(pairingManager: PairingManager) {
+export function authMiddleware(pairingManager: PairingManager, getAuthEnabled: () => boolean) {
   return (req: Request, res: Response, next: NextFunction): void => {
     // Allow public endpoints
     if (PUBLIC_PATHS.has(req.path)) {
@@ -17,6 +17,12 @@ export function authMiddleware(pairingManager: PairingManager) {
 
     // Allow static assets and console (local-only, protected by Host guard)
     if (req.path.startsWith("/public/") || req.path === "/console" || req.path.startsWith("/console/") || req.path.startsWith("/api/console/")) {
+      next();
+      return;
+    }
+
+    // Skip auth if disabled
+    if (!getAuthEnabled()) {
       next();
       return;
     }

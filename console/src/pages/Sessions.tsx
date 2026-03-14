@@ -9,14 +9,19 @@ import {
   Popconfirm,
   Space,
   Statistic,
+  Modal,
+  Input,
+  Alert,
   App as AntdApp,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { ReloadOutlined, DeleteOutlined } from "@ant-design/icons";
+import { ReloadOutlined, DeleteOutlined, PlusOutlined, CopyOutlined, StopOutlined } from "@ant-design/icons";
 import {
   getSessions,
   getTokens,
   revokeToken,
+  createToken,
+  revokeAllTokens,
   type Session,
   type TokenInfo,
 } from "../api.ts";
@@ -97,6 +102,10 @@ export default function Sessions() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [tokens, setTokens] = useState<TokenInfo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [createOrigin, setCreateOrigin] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [newToken, setNewToken] = useState<string | null>(null);
 
   const load = () => {
     Promise.all([getSessions(), getTokens()])
@@ -117,6 +126,30 @@ export default function Sessions() {
     try {
       await revokeToken(prefix);
       message.success("Token revoked");
+      load();
+    } catch (e: any) {
+      message.error(e.message);
+    }
+  };
+
+  const handleCreateToken = async () => {
+    setCreating(true);
+    try {
+      const result = await createToken({ origin: createOrigin || "manual" });
+      setNewToken(result.token);
+      message.success("Token created");
+      load();
+    } catch (e: any) {
+      message.error(e.message);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleRevokeAll = async () => {
+    try {
+      const result = await revokeAllTokens();
+      message.success(`${result.count} token(s) revoked`);
       load();
     } catch (e: any) {
       message.error(e.message);
@@ -185,9 +218,17 @@ export default function Sessions() {
         <Typography.Title level={4} style={{ margin: 0 }}>
           Sessions & Tokens
         </Typography.Title>
-        <Button icon={<ReloadOutlined />} onClick={load}>
-          Refresh
-        </Button>
+        <Space>
+          <Button icon={<PlusOutlined />} type="primary" onClick={() => { setCreateModalOpen(true); setNewToken(null); setCreateOrigin(""); }}>
+            Create Token
+          </Button>
+          {tokens.length > 0 && (
+            <Popconfirm title="Revoke all tokens?" description={`This will revoke ${tokens.length} active token(s).`} onConfirm={handleRevokeAll} okText="Revoke All" okButtonProps={{ danger: true }}>
+              <Button danger icon={<StopOutlined />}>Revoke All</Button>
+            </Popconfirm>
+          )}
+          <Button icon={<ReloadOutlined />} onClick={load}>Refresh</Button>
+        </Space>
       </div>
 
       <Space size={16} style={{ marginBottom: 16 }}>
@@ -232,6 +273,36 @@ export default function Sessions() {
           },
         ]}
       />
+
+      <Modal
+        title="Create Access Token"
+        open={createModalOpen}
+        onCancel={() => setCreateModalOpen(false)}
+        footer={newToken ? [
+          <Button key="close" onClick={() => setCreateModalOpen(false)}>Close</Button>
+        ] : [
+          <Button key="cancel" onClick={() => setCreateModalOpen(false)}>Cancel</Button>,
+          <Button key="create" type="primary" loading={creating} onClick={handleCreateToken}>Create</Button>,
+        ]}
+      >
+        {!newToken ? (
+          <div style={{ marginTop: 16 }}>
+            <Typography.Text style={{ display: "block", marginBottom: 8 }}>Origin (optional):</Typography.Text>
+            <Input placeholder="e.g. https://graphxr.kineviz.com" value={createOrigin} onChange={(e) => setCreateOrigin(e.target.value)} />
+            <Typography.Text type="secondary" style={{ display: "block", marginTop: 8, fontSize: 12 }}>
+              The origin this token will be bound to. Leave empty for "manual" origin (works with any client).
+            </Typography.Text>
+          </div>
+        ) : (
+          <div style={{ marginTop: 16 }}>
+            <Alert type="success" message="Token created successfully" description="Copy this token now — it won't be shown again." style={{ marginBottom: 12 }} />
+            <Input.TextArea readOnly value={newToken} rows={3} style={{ fontFamily: "monospace", fontSize: 12 }} />
+            <Button icon={<CopyOutlined />} style={{ marginTop: 8 }} onClick={() => { navigator.clipboard.writeText(newToken); message.success("Copied!"); }}>
+              Copy Token
+            </Button>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

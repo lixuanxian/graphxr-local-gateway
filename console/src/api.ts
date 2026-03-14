@@ -190,9 +190,25 @@ export const revokeToken = (tokenPrefix: string) =>
     method: "DELETE",
   });
 
+export const createToken = (data: { origin?: string }) =>
+  fetchJSON<{ token: string; tokenPrefix: string; expiresAt: string }>(
+    "/api/console/tokens",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }
+  );
+
+export const revokeAllTokens = () =>
+  fetchJSON<{ status: string; count: number }>("/api/console/tokens", {
+    method: "DELETE",
+  });
+
 // --- Settings ---
 export interface Settings {
   port: number;
+  authEnabled: boolean;
   allowedOrigins: string[];
   tokenTTL: number;
   pairingTimeout: number;

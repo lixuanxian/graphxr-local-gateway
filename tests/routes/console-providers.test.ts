@@ -11,6 +11,7 @@ import type { GatewayConfig } from "../../src/types/config.js";
 
 const testConfig: GatewayConfig = {
   port: 19285,
+  authEnabled: false,
   allowedOrigins: ["*"],
   tokenTTL: 3600,
   pairingTimeout: 300,

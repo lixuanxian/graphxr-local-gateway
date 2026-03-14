@@ -16,7 +16,7 @@ export class ConfigManager {
   }
 
   async update(
-    changes: Partial<Pick<GatewayConfig, "allowedOrigins" | "tokenTTL" | "pairingTimeout">>
+    changes: Partial<Pick<GatewayConfig, "allowedOrigins" | "tokenTTL" | "pairingTimeout" | "authEnabled">>
   ): Promise<GatewayConfig> {
     if (changes.tokenTTL !== undefined && changes.tokenTTL <= 0) {
       throw new Error("tokenTTL must be positive");

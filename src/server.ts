@@ -31,7 +31,7 @@ export function createApp(
   // --- Security middleware ---
   app.use(hostGuardMiddleware(config.port));
   app.use(corsMiddleware(() => configManager.get().allowedOrigins));
-  app.use(authMiddleware(pairingManager));
+  app.use(authMiddleware(pairingManager, () => configManager.get().authEnabled));
   app.use(rateLimitMiddleware(() => configManager.get().rateLimit));
 
   // --- Static: pair confirm page ---

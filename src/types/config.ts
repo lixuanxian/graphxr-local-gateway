@@ -38,6 +38,7 @@ export interface RateLimitConfig {
 
 export interface GatewayConfig {
   port: number;
+  authEnabled: boolean;
   allowedOrigins: string[];
   tokenTTL: number;
   pairingTimeout: number;

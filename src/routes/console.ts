@@ -42,6 +42,28 @@ export function consoleRouter(
     res.json({ tokens: pairingManager.listActiveTokens() });
   });
 
+  router.post("/api/console/tokens", (req, res) => {
+    const { origin, ttl } = req.body;
+    const tokenOrigin = origin || "console-manual";
+    const { pairingId } = pairingManager.startPairing(tokenOrigin, ["graph:read"]);
+    pairingManager.approve(pairingId);
+    const status = pairingManager.getStatus(pairingId);
+    if (status?.status === "approved") {
+      res.status(201).json({ token: status.token, expiresAt: status.expiresAt, origin: tokenOrigin });
+    } else {
+      res.status(500).json({ error: "Failed to create token" });
+    }
+  });
+
+  router.delete("/api/console/tokens", (_req, res) => {
+    const tokens = pairingManager.listActiveTokens();
+    let revoked = 0;
+    for (const t of tokens) {
+      if (pairingManager.revokeToken(t.tokenPrefix)) revoked++;
+    }
+    res.json({ status: "revoked", count: revoked });
+  });
+
   router.delete("/api/console/tokens/:tokenPrefix", (req, res) => {
     const { tokenPrefix } = req.params;
     const ok = pairingManager.revokeToken(tokenPrefix);
@@ -57,6 +79,7 @@ export function consoleRouter(
   router.get("/api/console/settings", (_req, res) => {
     const config = configManager.get();
     res.json({
+      authEnabled: config.authEnabled,
       port: config.port,
       allowedOrigins: config.allowedOrigins,
       tokenTTL: config.tokenTTL,
@@ -67,13 +90,15 @@ export function consoleRouter(
 
   router.put("/api/console/settings", async (req, res) => {
     try {
-      const { allowedOrigins, tokenTTL, pairingTimeout } = req.body;
+      const { allowedOrigins, tokenTTL, pairingTimeout, authEnabled } = req.body;
       const updated = await configManager.update({
         ...(allowedOrigins !== undefined && { allowedOrigins }),
         ...(tokenTTL !== undefined && { tokenTTL }),
         ...(pairingTimeout !== undefined && { pairingTimeout }),
+        ...(authEnabled !== undefined && { authEnabled }),
       });
       res.json({
+        authEnabled: updated.authEnabled,
         port: updated.port,
         allowedOrigins: updated.allowedOrigins,
         tokenTTL: updated.tokenTTL,

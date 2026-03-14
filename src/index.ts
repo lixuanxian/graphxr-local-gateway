@@ -17,6 +17,7 @@ function loadConfig(): GatewayConfig {
     logger.warn(`Config not found at ${CONFIG_PATH} — using defaults`);
     return {
       port: 19285,
+      authEnabled: false,
       allowedOrigins: ["*"],
       tokenTTL: 28800,
       pairingTimeout: 300,
@@ -24,7 +25,9 @@ function loadConfig(): GatewayConfig {
       providers: [],
     };
   }
-  return JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8"));
+  const parsed = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8"));
+  if (parsed.authEnabled === undefined) parsed.authEnabled = false;
+  return parsed;
 }
 
 async function main(): Promise<void> {

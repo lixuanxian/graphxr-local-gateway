@@ -12,6 +12,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const testConfig: GatewayConfig = {
   port: 19285,
+  authEnabled: false,
   allowedOrigins: ["https://graphxr.kineviz.com", "http://localhost:9000"],
   tokenTTL: 3600,
   pairingTimeout: 300,

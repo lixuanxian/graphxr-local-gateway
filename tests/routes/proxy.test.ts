@@ -12,6 +12,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const testConfig: GatewayConfig = {
   port: 19285,
+  authEnabled: true,
   allowedOrigins: ["*"],
   tokenTTL: 3600,
   pairingTimeout: 300,
