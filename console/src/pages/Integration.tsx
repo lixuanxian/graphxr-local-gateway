@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Card, Typography, Tabs, Tag, Space, Button, Alert, Descriptions } from "antd";
 import { App as AntdApp } from "antd";
-import { CopyOutlined, CheckCircleOutlined, LinkOutlined } from "@ant-design/icons";
+import { CopyOutlined, CheckCircleOutlined, LinkOutlined, ApiOutlined } from "@ant-design/icons";
 import { getProviders, getSettings, type ProviderInfo, type Settings } from "../api.ts";
 
 const { Text, Title, Paragraph } = Typography;
@@ -320,7 +320,8 @@ export default function Integration() {
     getSettings().then(setSettings).catch(() => {});
   }, []);
 
-  const baseUrl = "http://127.0.0.1:19285";
+  const port = settings?.port ?? 19285;
+  const baseUrl = `http://127.0.0.1:${port}`;
   const firstProvider = providers.find((p) => p.status === "connected") ?? providers[0];
   const authEnabled = settings?.authEnabled ?? false;
 
@@ -382,8 +383,8 @@ export default function Integration() {
         </div>
       </Card>
 
-      {/* Code Examples */}
-      <Card title={<Space><CheckCircleOutlined /> Code Examples</Space>} size="small">
+      {/* API Examples */}
+      <Card title={<Space><CheckCircleOutlined /> API Examples</Space>} size="small">
         <Tabs
           items={[
             {
@@ -426,22 +427,27 @@ export default function Integration() {
                 />
               ),
             },
+          ]}
+        />
+      </Card>
+
+      {/* AI Integration */}
+      <Card
+        title={<Space><ApiOutlined /> AI Integration</Space>}
+        size="small"
+        style={{ marginTop: 16 }}
+      >
+        <Paragraph type="secondary" style={{ marginBottom: 12 }}>
+          Use the gateway as a tool backend for AI agents. The gateway API can be called from any LLM framework.
+        </Paragraph>
+        <Tabs
+          items={[
             {
               key: "claude",
               label: "Claude (Anthropic)",
               children: (
                 <CodeBlock
                   code={generateClaudeToolUse(baseUrl, firstProvider)}
-                  language="TypeScript"
-                />
-              ),
-            },
-            {
-              key: "mcp",
-              label: "MCP Client",
-              children: (
-                <CodeBlock
-                  code={generateMCPClientExample(firstProvider)}
                   language="TypeScript"
                 />
               ),
@@ -454,6 +460,24 @@ export default function Integration() {
                   code={generateOpenAIFunctionExample(baseUrl, firstProvider)}
                   language="TypeScript"
                 />
+              ),
+            },
+            {
+              key: "mcp",
+              label: "MCP Client (Direct)",
+              children: (
+                <>
+                  <Alert
+                    type="info"
+                    showIcon
+                    message="Direct MCP connection bypasses the gateway and connects to the MCP server directly."
+                    style={{ marginBottom: 12 }}
+                  />
+                  <CodeBlock
+                    code={generateMCPClientExample(firstProvider)}
+                    language="TypeScript"
+                  />
+                </>
               ),
             },
           ]}
