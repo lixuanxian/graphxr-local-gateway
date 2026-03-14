@@ -13,9 +13,11 @@ import {
 } from "@ant-design/icons";
 import {
   getStats,
+  getProviders,
   runSelfTest,
   getConnectionEvents,
   type Stats,
+  type ProviderInfo,
   type SelfTestResult,
   type ConnectionEvent,
 } from "../api.ts";
@@ -36,6 +38,7 @@ export default function Dashboard() {
   const [testOverall, setTestOverall] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
   const [events, setEvents] = useState<ConnectionEvent[]>([]);
+  const [providers, setProviders] = useState<ProviderInfo[]>([]);
 
   const load = () => {
     getStats()
@@ -43,6 +46,9 @@ export default function Dashboard() {
       .catch((e) => setError(e.message));
     getConnectionEvents(15)
       .then(setEvents)
+      .catch(() => {});
+    getProviders()
+      .then(setProviders)
       .catch(() => {});
   };
 
@@ -122,6 +128,37 @@ export default function Dashboard() {
           </Card>
         </Col>
       </Row>
+
+      {/* Provider health cards */}
+      {providers.length > 0 && (
+        <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+          {providers.map((p) => (
+            <Col xs={24} sm={12} lg={8} xl={6} key={p.name}>
+              <Card size="small">
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <Typography.Text strong>{p.name}</Typography.Text>
+                    <br />
+                    <Tag color="blue" style={{ fontSize: 10, marginTop: 4 }}>{p.databaseType}</Tag>
+                    <Tag style={{ fontSize: 10 }}>{p.transport}</Tag>
+                  </div>
+                  <Tag
+                    color={p.status === "connected" ? "green" : p.status === "error" ? "red" : "orange"}
+                    style={{ fontSize: 11 }}
+                  >
+                    {p.status}
+                  </Tag>
+                </div>
+                <div style={{ marginTop: 8 }}>
+                  <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+                    {p.datasets.join(", ")} | {(p.tools?.length ?? 0)} tools
+                  </Typography.Text>
+                </div>
+              </Card>
+            </Col>
+          ))}
+        </Row>
+      )}
 
       <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
         <Col span={24}>

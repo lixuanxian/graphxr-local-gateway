@@ -105,6 +105,26 @@ export function consoleRouter(
         return;
       }
 
+      // Validate provider name format
+      if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
+        res.status(400).json({ error: "Provider name must contain only letters, numbers, hyphens, and underscores" });
+        return;
+      }
+
+      // Transport-specific validation
+      if (transport === "stdio" && !command) {
+        res.status(400).json({ error: "stdio transport requires a command field" });
+        return;
+      }
+      if (transport === "http" && !endpoint) {
+        res.status(400).json({ error: "http transport requires an endpoint field" });
+        return;
+      }
+      if (transport !== "stdio" && transport !== "http") {
+        res.status(400).json({ error: 'transport must be "stdio" or "http"' });
+        return;
+      }
+
       const existing = providerRegistry.listProviders().find((p) => p.name === name);
       if (existing) {
         res.status(409).json({ error: `Provider "${name}" already exists` });
