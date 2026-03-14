@@ -309,9 +309,12 @@ export function consoleRouter(
       return;
     }
 
+    const parameters = req.body.parameters as Record<string, unknown> | undefined;
+
     const startTime = Date.now();
     try {
       const result = await adapter.query(dataset, query, {
+        params: parameters,
         limit: req.body.limit ?? 25,
       });
       const elapsed = Date.now() - startTime;

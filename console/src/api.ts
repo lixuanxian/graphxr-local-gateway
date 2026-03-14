@@ -257,6 +257,7 @@ export interface TestQueryResult {
 
 export const consoleTestQuery = (name: string, body: {
   dataset?: string;
+  parameters?: Record<string, unknown>;
   query: string;
   limit?: number;
 }) =>
