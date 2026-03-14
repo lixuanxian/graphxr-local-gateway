@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Card, Typography, Tabs, Tag, Space, Button, Alert, Descriptions } from "antd";
 import { App as AntdApp } from "antd";
-import { CopyOutlined, CheckCircleOutlined, LinkOutlined, ApiOutlined } from "@ant-design/icons";
+import { CopyOutlined, CheckCircleOutlined, LinkOutlined, ApiOutlined, RobotOutlined } from "@ant-design/icons";
 import { getProviders, getSettings, type ProviderInfo, type Settings } from "../api.ts";
 
 const { Text, Title, Paragraph } = Typography;
@@ -311,6 +311,108 @@ interface GEdge {
 }`;
 }
 
+function generateClaudeDesktopConfig() {
+  return `// File: claude_desktop_config.json (Claude Desktop)
+// Location:
+//   macOS: ~/Library/Application Support/Claude/claude_desktop_config.json
+//   Windows: %APPDATA%\\Claude\\claude_desktop_config.json
+
+{
+  "mcpServers": {
+    "graphxr-gateway": {
+      "command": "node",
+      "args": ["dist/mcp-server-entry.js"],
+      "cwd": "/path/to/graphxr-local-gateway"
+    }
+  }
+}
+
+// Or if installed globally / via npx:
+{
+  "mcpServers": {
+    "graphxr-gateway": {
+      "command": "npx",
+      "args": ["graphxr-local-gateway"]
+    }
+  }
+}`;
+}
+
+function generateClaudeCodeConfig() {
+  return `# Claude Code — add the gateway as an MCP server
+
+# Option 1: Add via CLI (project-scoped)
+claude mcp add graphxr-gateway \\
+  node dist/mcp-server-entry.js \\
+  --cwd /path/to/graphxr-local-gateway
+
+# Option 2: Add via .mcp.json in your project root
+# File: .mcp.json
+{
+  "mcpServers": {
+    "graphxr-gateway": {
+      "command": "node",
+      "args": ["dist/mcp-server-entry.js"],
+      "cwd": "/path/to/graphxr-local-gateway"
+    }
+  }
+}
+
+# Once added, Claude Code can use these tools:
+#   - list_providers   → See all connected graph databases
+#   - get_schema       → Get node/edge types and properties
+#   - query_graph      → Run Cypher/GQL queries
+#   - get_neighbors    → Explore graph connections
+
+# Example conversation:
+#   You: "What types of nodes are in the graph?"
+#   Claude: [calls get_schema] → "The graph has Person, Company, ..."
+#   You: "Find all people who work at Google"
+#   Claude: [calls query_graph with MATCH query] → shows results`;
+}
+
+function generateCursorConfig() {
+  return `// Cursor — add via .cursor/mcp.json in your project root
+// File: .cursor/mcp.json
+
+{
+  "mcpServers": {
+    "graphxr-gateway": {
+      "command": "node",
+      "args": ["dist/mcp-server-entry.js"],
+      "cwd": "/path/to/graphxr-local-gateway"
+    }
+  }
+}
+
+// After adding, Cursor's AI can:
+// - Query your graph database directly
+// - Explore schema and relationships
+// - Generate code based on your actual data model`;
+}
+
+function generateOpenCodeConfig() {
+  return `# OpenCode — add via opencode.json in your project root
+# File: opencode.json
+
+{
+  "mcp": {
+    "graphxr-gateway": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["dist/mcp-server-entry.js"],
+      "cwd": "/path/to/graphxr-local-gateway"
+    }
+  }
+}
+
+# Available MCP tools after connection:
+#   list_providers  — List graph database providers
+#   get_schema      — Get graph schema (categories + relationships)
+#   query_graph     — Execute Cypher/GQL/SQL queries
+#   get_neighbors   — Get connected nodes for graph exploration`;
+}
+
 export default function Integration() {
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -431,14 +533,70 @@ export default function Integration() {
         />
       </Card>
 
-      {/* AI Integration */}
+      {/* AI Tools — Direct MCP Connection */}
       <Card
-        title={<Space><ApiOutlined /> AI Integration</Space>}
+        title={<Space><RobotOutlined /> AI Tools (MCP Server)</Space>}
         size="small"
         style={{ marginTop: 16 }}
       >
         <Paragraph type="secondary" style={{ marginBottom: 12 }}>
-          Use the gateway as a tool backend for AI agents. The gateway API can be called from any LLM framework.
+          The gateway can run as an MCP server, letting AI coding tools query your graph databases directly.
+          Add the gateway to your AI tool's MCP config to enable graph tools (list_providers, get_schema, query_graph, get_neighbors).
+        </Paragraph>
+        <Tabs
+          items={[
+            {
+              key: "claude-code",
+              label: "Claude Code",
+              children: (
+                <CodeBlock
+                  code={generateClaudeCodeConfig()}
+                  language="bash"
+                />
+              ),
+            },
+            {
+              key: "claude-desktop",
+              label: "Claude Desktop",
+              children: (
+                <CodeBlock
+                  code={generateClaudeDesktopConfig()}
+                  language="JSON"
+                />
+              ),
+            },
+            {
+              key: "cursor",
+              label: "Cursor",
+              children: (
+                <CodeBlock
+                  code={generateCursorConfig()}
+                  language="JSON"
+                />
+              ),
+            },
+            {
+              key: "opencode",
+              label: "OpenCode",
+              children: (
+                <CodeBlock
+                  code={generateOpenCodeConfig()}
+                  language="JSON"
+                />
+              ),
+            },
+          ]}
+        />
+      </Card>
+
+      {/* AI SDK Integration */}
+      <Card
+        title={<Space><ApiOutlined /> AI SDK Integration</Space>}
+        size="small"
+        style={{ marginTop: 16 }}
+      >
+        <Paragraph type="secondary" style={{ marginBottom: 12 }}>
+          Alternatively, use the gateway HTTP API as a tool backend for AI agents in your own code.
         </Paragraph>
         <Tabs
           items={[

@@ -4,6 +4,9 @@
   "description": "GraphXR Localhost Gateway — MCP Bridge + Aggregator for local graph data access",
   "type": "module",
   "main": "dist/index.js",
+  "bin": {
+    "graphxr-local-gateway": "dist/mcp-server-entry.js"
+  },
   "scripts": {
     "dev": "npx concurrently  \"npm run dev:server\" \"npm run dev:web\"",
     "dev:web": "cd console  && npm run dev",
@@ -11,6 +14,7 @@
     "dev:server": "tsx watch src/index.ts",
     "build:server": "tsup",
     "start": "node dist/index.js",
+    "start:mcp": "node dist/mcp-server-entry.js",
     "test": "vitest run",
     "test:watch": "vitest"
   },
