@@ -248,6 +248,21 @@ export const testProviderConnection = (name: string) =>
     { method: "POST" }
   );
 
+// --- SSE Events Stream ---
+export function subscribeToEvents(
+  onConnection: (event: ConnectionEvent) => void,
+  onProviders: (providers: ProviderInfo[]) => void,
+): () => void {
+  const es = new EventSource("/api/console/events/stream");
+  es.addEventListener("connection", (e) => {
+    try { onConnection(JSON.parse(e.data)); } catch { /* ignore parse errors */ }
+  });
+  es.addEventListener("providers", (e) => {
+    try { onProviders(JSON.parse(e.data)); } catch { /* ignore parse errors */ }
+  });
+  return () => es.close();
+}
+
 // --- Health ---
 export interface HealthResponse {
   status: string;
