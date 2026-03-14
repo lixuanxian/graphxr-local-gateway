@@ -95,6 +95,7 @@ export function consoleRouter(
     const config = configManager.get();
     res.json({
       authEnabled: config.authEnabled,
+      rateLimitEnabled: config.rateLimitEnabled,
       port: config.port,
       allowedOrigins: config.allowedOrigins,
       tokenTTL: config.tokenTTL,
@@ -105,15 +106,18 @@ export function consoleRouter(
 
   router.put("/api/console/settings", async (req, res) => {
     try {
-      const { allowedOrigins, tokenTTL, pairingTimeout, authEnabled } = req.body;
+      const { allowedOrigins, tokenTTL, pairingTimeout, authEnabled, rateLimitEnabled, rateLimit } = req.body;
       const updated = await configManager.update({
         ...(allowedOrigins !== undefined && { allowedOrigins }),
         ...(tokenTTL !== undefined && { tokenTTL }),
         ...(pairingTimeout !== undefined && { pairingTimeout }),
         ...(authEnabled !== undefined && { authEnabled }),
+        ...(rateLimitEnabled !== undefined && { rateLimitEnabled }),
+        ...(rateLimit !== undefined && { rateLimit }),
       });
       res.json({
         authEnabled: updated.authEnabled,
+        rateLimitEnabled: updated.rateLimitEnabled,
         port: updated.port,
         allowedOrigins: updated.allowedOrigins,
         tokenTTL: updated.tokenTTL,

@@ -46,14 +46,14 @@ import {
 import { EVENT_CONFIG } from "../utils/event-config.tsx";
 
 const DB_TYPE_COLORS: Record<string, string> = {
-  neo4j: "green",
   spanner: "blue",
-  postgresql: "cyan",
-  mysql: "orange",
-  mongodb: "lime",
+  neo4j: "green",
+  memgraph: "volcano",
+  // postgresql: "cyan",
+  // mysql: "orange",
+  // mongodb: "lime",
   neptune: "purple",
   tigergraph: "magenta",
-  memgraph: "volcano",
   generic: "default",
 };
 

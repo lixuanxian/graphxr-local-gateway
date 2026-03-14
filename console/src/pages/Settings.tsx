@@ -34,12 +34,15 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [authEnabled, setAuthEnabled] = useState(false);
+  const [rateLimitEnabled, setRateLimitEnabled] = useState(false);
   const [allowAll, setAllowAll] = useState(false);
   const [origins, setOrigins] = useState<string[]>([]);
   const { message } = AntdApp.useApp();
   const [form] = Form.useForm();
   const tokenTTL = Form.useWatch("tokenTTL", form);
   const pairingTimeout = Form.useWatch("pairingTimeout", form);
+  const windowMs = Form.useWatch("windowMs", form);
+  const maxReq = Form.useWatch("maxReq", form);
 
   const load = () => {
     setLoading(true);
@@ -47,12 +50,15 @@ export default function Settings() {
       .then((s) => {
         setSettings(s);
         setAuthEnabled(s.authEnabled);
+        setRateLimitEnabled(s.rateLimitEnabled);
         const isWildcard = s.allowedOrigins.length === 1 && s.allowedOrigins[0] === "*";
         setAllowAll(isWildcard);
         setOrigins(isWildcard ? [] : s.allowedOrigins);
         form.setFieldsValue({
           tokenTTL: s.tokenTTL,
           pairingTimeout: s.pairingTimeout,
+          windowMs: s.rateLimit.windowMs / 1000,
+          maxReq: s.rateLimit.max,
         });
         setError(null);
       })
@@ -70,9 +76,11 @@ export default function Settings() {
       const values = form.getFieldsValue();
       const updated = await updateSettings({
         authEnabled,
+        rateLimitEnabled,
         allowedOrigins: allowAll ? ["*"] : origins,
         tokenTTL: values.tokenTTL,
         pairingTimeout: values.pairingTimeout,
+        rateLimit: { windowMs: (values.windowMs ?? 60) * 1000, max: values.maxReq ?? 60 },
       });
       setSettings(updated);
       message.success("Settings saved");
@@ -100,16 +108,13 @@ export default function Settings() {
 
       {/* Read-only info */}
       <Card size="small" style={{ marginBottom: 16, maxWidth: 640 }}>
-        <Descriptions column={2} size="small">
+        <Descriptions column={1} size="small">
           <Descriptions.Item label="Listen Port">
             <Typography.Text code>127.0.0.1:{settings.port}</Typography.Text>
           </Descriptions.Item>
-          <Descriptions.Item label="Rate Limit">
-            {settings.rateLimit.max} req / {settings.rateLimit.windowMs / 1000}s
-          </Descriptions.Item>
         </Descriptions>
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          Port and rate limit require a server restart to change.
+          Port requires a server restart to change.
         </Typography.Text>
       </Card>
 
@@ -189,6 +194,42 @@ export default function Settings() {
                 />
               </Form.Item>
             </>
+          )}
+
+          <Divider />
+
+          {/* Rate Limiting */}
+          <Form.Item
+            label="API Rate Limiting"
+            extra={rateLimitEnabled
+              ? "Limits API requests per IP to prevent abuse."
+              : "Rate limiting is disabled. No request limits applied."}
+          >
+            <Space>
+              <Switch checked={rateLimitEnabled} onChange={setRateLimitEnabled} />
+              <Typography.Text>
+                {rateLimitEnabled ? "Enabled — per-IP request limits active" : "Disabled — unlimited requests (development mode)"}
+              </Typography.Text>
+            </Space>
+          </Form.Item>
+
+          {rateLimitEnabled && (
+            <Space size="middle" style={{ display: "flex" }}>
+              <Form.Item
+                label="Max Requests"
+                name="maxReq"
+                extra="Maximum requests per window per IP"
+              >
+                <InputNumber min={1} max={10000} style={{ width: 140 }} />
+              </Form.Item>
+              <Form.Item
+                label="Window"
+                name="windowMs"
+                extra="Time window in seconds"
+              >
+                <InputNumber min={1} max={3600} addonAfter="seconds" style={{ width: 180 }} />
+              </Form.Item>
+            </Space>
           )}
 
           <Divider />

@@ -18,6 +18,7 @@ function loadConfig(): GatewayConfig {
     return {
       port: 19285,
       authEnabled: false,
+      rateLimitEnabled: false,
       allowedOrigins: ["*"],
       tokenTTL: 28800,
       pairingTimeout: 300,
@@ -27,6 +28,7 @@ function loadConfig(): GatewayConfig {
   }
   const parsed = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8"));
   if (parsed.authEnabled === undefined) parsed.authEnabled = false;
+  if (parsed.rateLimitEnabled === undefined) parsed.rateLimitEnabled = false;
   return parsed;
 }
 

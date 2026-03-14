@@ -8,7 +8,7 @@ describe("Rate Limit Middleware", () => {
 
   beforeEach(() => {
     app = express();
-    app.use(rateLimitMiddleware(() => ({ windowMs: 1000, max: 3 })));
+    app.use(rateLimitMiddleware(() => ({ enabled: true, config: { windowMs: 1000, max: 3 } })));
     app.get("/api/test", (_req, res) => res.json({ ok: true }));
     app.get("/api/console/test", (_req, res) => res.json({ ok: true }));
     app.get("/health", (_req, res) => res.json({ ok: true }));

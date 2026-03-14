@@ -16,6 +16,7 @@ const testConfig: GatewayConfig = {
   allowedOrigins: ["*"],
   tokenTTL: 3600,
   pairingTimeout: 300,
+  rateLimitEnabled: false,
   rateLimit: { windowMs: 60000, max: 60 },
   providers: [],
 };

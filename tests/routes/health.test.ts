@@ -16,6 +16,7 @@ const testConfig: GatewayConfig = {
   allowedOrigins: ["https://graphxr.kineviz.com", "http://localhost:9000"],
   tokenTTL: 3600,
   pairingTimeout: 300,
+  rateLimitEnabled: false,
   rateLimit: { windowMs: 60000, max: 60 },
   providers: [],
 };

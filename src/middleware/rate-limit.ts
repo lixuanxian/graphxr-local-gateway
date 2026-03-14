@@ -5,7 +5,7 @@ import type { RateLimitConfig } from "../types/config.js";
  * Simple in-memory sliding-window rate limiter per IP address.
  * Only applies to authenticated API routes (not console or public paths).
  */
-export function rateLimitMiddleware(getConfig: () => RateLimitConfig) {
+export function rateLimitMiddleware(getConfig: () => { enabled: boolean; config: RateLimitConfig }) {
   const hits = new Map<string, { count: number; resetAt: number }>();
 
   // Cleanup stale entries periodically
@@ -31,7 +31,12 @@ export function rateLimitMiddleware(getConfig: () => RateLimitConfig) {
       return;
     }
 
-    const config = getConfig();
+    const { enabled, config } = getConfig();
+    if (!enabled) {
+      next();
+      return;
+    }
+
     if (config.max <= 0) {
       next();
       return;

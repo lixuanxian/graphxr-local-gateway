@@ -217,6 +217,7 @@ export const revokeAllTokens = () =>
 export interface Settings {
   port: number;
   authEnabled: boolean;
+  rateLimitEnabled: boolean;
   allowedOrigins: string[];
   tokenTTL: number;
   pairingTimeout: number;

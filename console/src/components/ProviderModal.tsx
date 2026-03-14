@@ -7,14 +7,14 @@ import { getTemplates } from "../api.ts";
 const { Text } = Typography;
 
 const DATABASE_TYPE_OPTIONS: { label: string; value: DatabaseType }[] = [
-  { label: "Neo4j", value: "neo4j" },
   { label: "Spanner Graph", value: "spanner" },
-  { label: "PostgreSQL", value: "postgresql" },
-  { label: "MySQL", value: "mysql" },
-  { label: "MongoDB", value: "mongodb" },
+  { label: "Neo4j", value: "neo4j" },
+  { label: "Memgraph", value: "memgraph" },
   { label: "Neptune", value: "neptune" },
   { label: "TigerGraph", value: "tigergraph" },
-  { label: "Memgraph", value: "memgraph" },
+  // { label: "PostgreSQL", value: "postgresql" },
+  // { label: "MySQL", value: "mysql" },
+  // { label: "MongoDB", value: "mongodb" },
   { label: "Generic", value: "generic" },
 ];
 

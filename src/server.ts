@@ -32,7 +32,10 @@ export function createApp(
   app.use(hostGuardMiddleware(config.port));
   app.use(corsMiddleware(() => configManager.get().allowedOrigins));
   app.use(authMiddleware(pairingManager, () => configManager.get().authEnabled));
-  app.use(rateLimitMiddleware(() => configManager.get().rateLimit));
+  app.use(rateLimitMiddleware(() => ({
+    enabled: configManager.get().rateLimitEnabled,
+    config: configManager.get().rateLimit,
+  })));
 
   // --- Static: pair confirm page ---
   const publicDir = path.resolve(__dirname, "..", "public");
