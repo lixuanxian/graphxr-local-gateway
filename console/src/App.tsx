@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Layout, Menu, Typography } from "antd";
+import { useState, useEffect } from "react";
+import { Layout, Menu, Typography, Tag } from "antd";
 import {
   DashboardOutlined,
   ApiOutlined,
@@ -8,6 +8,7 @@ import {
   SettingOutlined,
   BookOutlined,
 } from "@ant-design/icons";
+import { getHealth } from "./api.ts";
 import Dashboard from "./pages/Dashboard.tsx";
 import Providers from "./pages/Providers.tsx";
 import Sessions from "./pages/Sessions.tsx";
@@ -29,6 +30,14 @@ const menuItems = [
 
 export default function App() {
   const [current, setCurrent] = useState("dashboard");
+  const [healthOk, setHealthOk] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const check = () => getHealth().then(() => setHealthOk(true)).catch(() => setHealthOk(false));
+    check();
+    const t = setInterval(check, 30000);
+    return () => clearInterval(t);
+  }, []);
 
   const pages: Record<string, React.ReactNode> = {
     dashboard: <Dashboard onNavigate={setCurrent} />,
@@ -86,6 +95,12 @@ export default function App() {
           <Typography.Text style={{ color: "#888", fontSize: 13 }}>
             http://127.0.0.1:19285
           </Typography.Text>
+          <Tag
+            color={healthOk === null ? "default" : healthOk ? "green" : "red"}
+            style={{ marginLeft: 12, fontSize: 11 }}
+          >
+            {healthOk === null ? "..." : healthOk ? "Connected" : "Unreachable"}
+          </Tag>
         </Header>
         <Content
           style={{
