@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>GraphXR Gateway — Browser Integration Example</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; background: #1a1a2e; color: #e0e0e0; }
+    h1 { color: #4fc3f7; }
+    button { background: #4fc3f7; border: none; color: #1a1a2e; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 14px; margin: 4px; }
+    button:hover { background: #81d4fa; }
+    pre { background: #12141c; padding: 16px; border-radius: 8px; overflow-x: auto; font-size: 13px; border: 1px solid #2a2d3a; }
+    .status { padding: 4px 8px; border-radius: 4px; display: inline-block; margin: 4px 0; }
+    .ok { background: #1b5e20; color: #a5d6a7; }
+    .err { background: #b71c1c; color: #ef9a9a; }
+    #output { white-space: pre-wrap; }
+    input { background: #12141c; border: 1px solid #2a2d3a; color: #e0e0e0; padding: 8px; border-radius: 4px; width: 100%; box-sizing: border-box; font-family: monospace; }
+  </style>
+</head>
+<body>
+  <h1>GraphXR Gateway — Browser Example</h1>
+  <p>This page demonstrates how to call the gateway API from a browser.</p>
+
+  <h3>Gateway URL</h3>
+  <input id="gatewayUrl" value="http://127.0.0.1:19285" />
+
+  <h3>Token (leave empty if auth is disabled)</h3>
+  <input id="token" placeholder="Paste bearer token here if auth is enabled..." />
+
+  <h3>Actions</h3>
+  <button onclick="checkHealth()">Check Health</button>
+  <button onclick="listProviders()">List Providers</button>
+  <button onclick="getSchema()">Get Schema</button>
+  <button onclick="runQuery()">Run Sample Query</button>
+
+  <h3>Query</h3>
+  <input id="query" value="MATCH (n) RETURN n LIMIT 10" />
+
+  <h3>Output</h3>
+  <pre id="output">Click a button above to get started...</pre>
+
+  <script>
+    function getUrl() { return document.getElementById("gatewayUrl").value; }
+    function getHeaders() {
+      const h = { "Content-Type": "application/json" };
+      const token = document.getElementById("token").value;
+      if (token) h["Authorization"] = "Bearer " + token;
+      return h;
+    }
+    function show(data) {
+      document.getElementById("output").textContent = JSON.stringify(data, null, 2);
+    }
+    function showError(err) {
+      document.getElementById("output").textContent = "Error: " + err.message;
+    }
+
+    async function checkHealth() {
+      try {
+        const res = await fetch(getUrl() + "/health");
+        show(await res.json());
+      } catch (e) { showError(e); }
+    }
+
+    async function listProviders() {
+      try {
+        const res = await fetch(getUrl() + "/api/providers", { headers: getHeaders() });
+        show(await res.json());
+      } catch (e) { showError(e); }
+    }
+
+    async function getSchema() {
+      try {
+        const providers = await fetch(getUrl() + "/api/providers", { headers: getHeaders() }).then(r => r.json());
+        if (!providers.providers?.length) { show({ error: "No providers" }); return; }
+        const p = providers.providers[0];
+        const res = await fetch(getUrl() + "/api/providers/" + p.name + "/graphSchema?dataset=" + p.datasets[0], { headers: getHeaders() });
+        show(await res.json());
+      } catch (e) { showError(e); }
+    }
+
+    async function runQuery() {
+      try {
+        const providers = await fetch(getUrl() + "/api/providers", { headers: getHeaders() }).then(r => r.json());
+        if (!providers.providers?.length) { show({ error: "No providers" }); return; }
+        const p = providers.providers[0];
+        const query = document.getElementById("query").value;
+        const res = await fetch(getUrl() + "/api/providers/" + p.name + "/query", {
+          method: "POST",
+          headers: getHeaders(),
+          body: JSON.stringify({ query, parameters: {}, dataset: p.datasets[0] }),
+        });
+        show(await res.json());
+      } catch (e) { showError(e); }
+    }
+  </script>
+</body>
+</html>
