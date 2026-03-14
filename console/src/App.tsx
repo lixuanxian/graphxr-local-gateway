@@ -6,11 +6,13 @@ import {
   KeyOutlined,
   CodeOutlined,
   SettingOutlined,
+  BookOutlined,
 } from "@ant-design/icons";
 import Dashboard from "./pages/Dashboard.tsx";
 import Providers from "./pages/Providers.tsx";
 import Sessions from "./pages/Sessions.tsx";
 import GraphExplorer from "./pages/GraphExplorer.tsx";
+import Integration from "./pages/Integration.tsx";
 import Settings from "./pages/Settings.tsx";
 import ErrorBoundary from "./components/ErrorBoundary.tsx";
 
@@ -21,6 +23,7 @@ const menuItems = [
   { key: "providers", icon: <ApiOutlined />, label: "Providers" },
   { key: "sessions", icon: <KeyOutlined />, label: "Sessions & Tokens" },
   { key: "explorer", icon: <CodeOutlined />, label: "Graph Explorer" },
+  { key: "integration", icon: <BookOutlined />, label: "Integration" },
   { key: "settings", icon: <SettingOutlined />, label: "Settings" },
 ];
 
@@ -32,6 +35,7 @@ export default function App() {
     providers: <Providers />,
     sessions: <Sessions />,
     explorer: <GraphExplorer />,
+    integration: <Integration />,
     settings: <Settings />,
   };
 
