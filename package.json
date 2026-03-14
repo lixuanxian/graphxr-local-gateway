@@ -5,7 +5,7 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "npx concurrently \"npm run dev:web\" \"npm run dev:server\"",
+    "dev": "npx concurrently  \"npm run dev:server\" \"npm run dev:web\"",
     "dev:web": "cd console  && npm run dev",
     "build:web": "cd console  && npm run build",
     "dev:server": "tsx watch src/index.ts",

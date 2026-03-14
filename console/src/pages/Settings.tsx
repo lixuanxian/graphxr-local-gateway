@@ -37,6 +37,8 @@ export default function Settings() {
   const [origins, setOrigins] = useState<string[]>([]);
   const { message } = AntdApp.useApp();
   const [form] = Form.useForm();
+  const tokenTTL = Form.useWatch("tokenTTL", form);
+  const pairingTimeout = Form.useWatch("pairingTimeout", form);
 
   const load = () => {
     setLoading(true);
@@ -81,9 +83,6 @@ export default function Settings() {
   if (loading) return <Spin size="large" style={{ display: "block", marginTop: 80 }} />;
   if (error) return <Alert type="error" message="Failed to load settings" description={error} />;
   if (!settings) return null;
-
-  const tokenTTL = Form.useWatch("tokenTTL", form);
-  const pairingTimeout = Form.useWatch("pairingTimeout", form);
 
   return (
     <div>
